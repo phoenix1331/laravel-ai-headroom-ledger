@@ -67,4 +67,11 @@ Rows that never receive `TokensUsed` (blocked, abandoned stream, `Headroom::for(
 
 ## Checks
 
-Run in WSL at the end of every task, in order: `vendor/bin/pint`, `vendor/bin/phpstan analyse`, `vendor/bin/pest` (90%+ line coverage on `src/`, pcov).
+Run in WSL at the end of every task. Composer scripts stand in for Makefile targets.
+
+| Script | Runs |
+|---|---|
+| `composer lint` / `lint:test` | `pint` / `pint --test` |
+| `composer analyse` | `phpstan analyse --memory-limit=1G` |
+| `composer test` / `test:coverage` | `pest` / `pest --coverage --min=90` (pcov, `src/` only) |
+| `composer check` | `lint`, `analyse`, `test:coverage` in that order; stops at the first failure |
