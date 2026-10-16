@@ -49,6 +49,8 @@ Rows that never receive `TokensUsed` (blocked, abandoned stream, `Headroom::for(
 | `orchestra/testbench` (dev) | `^10.0\|^11.0` | Testbench 10 = Laravel 12, 11 = Laravel 13 |
 | `pestphp/pest` (dev) | `^4.2\|^5.0` | Pest 4 covers PHP 8.3; same reasoning as Headroom |
 | `pestphp/pest-plugin-laravel` (dev) | `^4.0\|^5.0` | Matches Pest |
+| `laravel/pint` (dev) | `^1.32` | Code style; `pint.json` uses the `laravel` preset plus `declare_strict_types` |
+| `larastan/larastan` (dev) | `^3.0` | Static analysis at `level: max`, no baseline; paths `src`, `config`, `database`; `config` declared as a config directory so `env()` there is allowed |
 | `husky` (npm dev) | `^9.1.7` | Git hooks in `.husky/` (tracked): `commit-msg` (lowercase conventional commits, no scope), `pre-commit` (`pint --test`, `osv-scanner` on `composer.lock`). Run `npm install` once to activate. Hooks run under `sh`, so POSIX only |
 
 ## Decisions
