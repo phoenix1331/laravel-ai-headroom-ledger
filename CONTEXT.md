@@ -58,7 +58,7 @@ Rows that never receive `TokensUsed` (blocked, abandoned stream, `Headroom::for(
 | Workflow | Trigger | Runs |
 |---|---|---|
 | `tests.yml` `test` | push/PR to `main` | PHP 8.3/8.4/8.5 x Laravel 12/13 x prefer-lowest/prefer-stable on SQLite; Pint `--test` on prefer-stable |
-| `tests.yml` `postgres` | push/PR to `main` | PHP 8.4 x Laravel 12/13 against a `postgres:17` service (`DB_*` env overrides `phpunit.xml`, which does not force its values) |
+| `tests.yml` `databases` | push/PR to `main` | PHP 8.4 x Laravel 12/13 x `postgres:17`, `mysql:8.4`, `mariadb:11` (Laravel's `mariadb` driver) as service containers; waits for a PDO connection, then `DB_*` env overrides `phpunit.xml`, which does not force its values |
 | `tests.yml` `coverage` | push/PR to `main` | pcov, `--min=90`, output in the job summary (`shell: bash` so `tee` keeps the failure) |
 | `tests.yml` `archive` | push/PR to `main` | `git archive HEAD \| tar -t` must contain only `src/`, `config/`, `database/`, `composer.json`, `README.md`, `LICENSE` |
 | `static-analysis.yml` | push/PR to `main` | Larastan with GitHub annotations |
@@ -75,10 +75,10 @@ Rows that never receive `TokensUsed` (blocked, abandoned stream, `Headroom::for(
 | Mixed currencies are grouped per currency, never summed | No currency conversion in scope; consumers decide |
 | Aggregates read daily rollups for closed days, raw entries for today | Keeps dashboards fast without losing same-day data |
 | Stay on 0.x until `filament-headroom` is built against the ledger | The dashboard is what proves the schema and query API before they become 1.0 public API |
-| No Docker, FrankenPHP, Makefile, MySQL or `request.http` | Package development only needs PHP and Composer in WSL; Composer scripts replace Makefile targets |
+| No Docker, FrankenPHP, Makefile, local MySQL or `request.http` | Package development only needs PHP and Composer in WSL; Composer scripts replace Makefile targets |
 | No Dependabot | Avoids a stream of automated PRs; dependencies are updated by hand. osv-scanner in the pre-commit hook still flags vulnerable packages |
 | `composer.lock` not committed | Library; consumers resolve their own versions |
-| CI databases: SQLite and PostgreSQL | MySQL/MariaDB jobs pending approval |
+| CI databases: SQLite, PostgreSQL, MySQL, MariaDB | SQLite is too lenient (loose GROUP BY, typing, lengths) to prove aggregate queries; MySQL/MariaDB are what most Laravel apps run. CI only, no local database needed |
 
 ## Checks
 
