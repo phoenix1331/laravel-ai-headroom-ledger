@@ -1,0 +1,190 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4', '8.5']
+        laravel: ['12', '13']
+        dependency-version: [prefer-lowest, prefer-stable]
+
+    name: php ${{ matrix.php }} / laravel ${{ matrix.laravel }} / ${{ matrix.dependency-version }} / sqlite
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      - name: setup php
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, xml, ctype, fileinfo, pdo_sqlite
+          coverage: none
+
+      - name: select testbench version
+        id: testbench
+        run: |
+          case "${{ matrix.laravel }}" in
+            12) echo "version=^10.0" >> $GITHUB_OUTPUT ;;
+            13) echo "version=^11.0" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: disable composer security advisory blocking for test dependencies
+        run: composer config --no-interaction policy.advisories.block false
+
+      - name: require specific laravel and testbench versions
+        run: |
+          composer require \
+            "illuminate/contracts:^${{ matrix.laravel }}.0" \
+            "illuminate/database:^${{ matrix.laravel }}.0" \
+            "illuminate/support:^${{ matrix.laravel }}.0" \
+            "orchestra/testbench:${{ steps.testbench.outputs.version }}" \
+            --no-interaction --no-update
+
+      - name: install dependencies
+        run: composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction
+
+      - name: lint
+        if: matrix.dependency-version == 'prefer-stable'
+        run: vendor/bin/pint --test
+
+      - name: run tests
+        run: vendor/bin/pest
+
+  postgres:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        laravel: ['12', '13']
+
+    name: php 8.4 / laravel ${{ matrix.laravel }} / postgres
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testing
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: testing
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      - name: setup php
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, xml, ctype, fileinfo, pdo_pgsql
+          coverage: none
+
+      - name: select testbench version
+        id: testbench
+        run: |
+          case "${{ matrix.laravel }}" in
+            12) echo "version=^10.0" >> $GITHUB_OUTPUT ;;
+            13) echo "version=^11.0" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: require specific laravel and testbench versions
+        run: |
+          composer require \
+            "illuminate/contracts:^${{ matrix.laravel }}.0" \
+            "illuminate/database:^${{ matrix.laravel }}.0" \
+            "illuminate/support:^${{ matrix.laravel }}.0" \
+            "orchestra/testbench:${{ steps.testbench.outputs.version }}" \
+            --no-interaction --no-update
+
+      - name: install dependencies
+        run: composer update --prefer-stable --prefer-dist --no-interaction
+
+      - name: run tests
+        run: vendor/bin/pest
+
+  coverage:
+    runs-on: ubuntu-latest
+
+    name: coverage
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      - name: setup php
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, xml, ctype, fileinfo, pdo_sqlite
+          coverage: pcov
+
+      - name: install dependencies
+        run: composer update --prefer-stable --prefer-dist --no-interaction
+
+      - name: run tests with coverage
+        shell: bash
+        run: vendor/bin/pest --coverage --min=90 | tee coverage.txt
+
+      - name: add coverage to the job summary
+        if: always()
+        run: |
+          {
+            echo '### coverage'
+            echo '```'
+            cat coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  archive:
+    runs-on: ubuntu-latest
+
+    name: package contents
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      - name: fail if the archive ships anything outside the allowed list
+        shell: bash
+        run: |
+          unexpected=$(git archive HEAD | tar -t \
+            | grep -vE '^(src/|config/|database/(migrations|factories)?/?|composer\.json$|README\.md$|LICENSE$)' || true)
+
+          if [ -n "$unexpected" ]; then
+            echo "error: the package archive contains files outside the allowed list:"
+            echo "$unexpected"
+            echo "add them to .gitattributes with export-ignore, or to the allowed list in this workflow."
+            exit 1
+          fi
+
+          {
+            echo '### package contents'
+            echo '```'
+            git archive HEAD | tar -t
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -53,6 +53,17 @@ Rows that never receive `TokensUsed` (blocked, abandoned stream, `Headroom::for(
 | `larastan/larastan` (dev) | `^3.0` | Static analysis at `level: max`, no baseline; paths `src`, `config`, `database`; `config` declared as a config directory so `env()` there is allowed |
 | `husky` (npm dev) | `^9.1.7` | Git hooks in `.husky/` (tracked): `commit-msg` (lowercase conventional commits, no scope), `pre-commit` (`pint --test`, `osv-scanner` on `composer.lock`). Run `npm install` once to activate. Hooks run under `sh`, so POSIX only |
 
+## CI (`.github/`)
+
+| Workflow | Trigger | Runs |
+|---|---|---|
+| `tests.yml` `test` | push/PR to `main` | PHP 8.3/8.4/8.5 x Laravel 12/13 x prefer-lowest/prefer-stable on SQLite; Pint `--test` on prefer-stable |
+| `tests.yml` `postgres` | push/PR to `main` | PHP 8.4 x Laravel 12/13 against a `postgres:17` service (`DB_*` env overrides `phpunit.xml`, which does not force its values) |
+| `tests.yml` `coverage` | push/PR to `main` | pcov, `--min=90`, output in the job summary (`shell: bash` so `tee` keeps the failure) |
+| `tests.yml` `archive` | push/PR to `main` | `git archive HEAD \| tar -t` must contain only `src/`, `config/`, `database/`, `composer.json`, `README.md`, `LICENSE` |
+| `static-analysis.yml` | push/PR to `main` | Larastan with GitHub annotations |
+| `release.yml` | tag `v*` | GitHub release with notes from the matching `## [X.Y.Z]` `CHANGELOG.md` section; fails if missing |
+
 ## Decisions
 
 | Decision | Reason |
@@ -65,6 +76,7 @@ Rows that never receive `TokensUsed` (blocked, abandoned stream, `Headroom::for(
 | Aggregates read daily rollups for closed days, raw entries for today | Keeps dashboards fast without losing same-day data |
 | Stay on 0.x until `filament-headroom` is built against the ledger | The dashboard is what proves the schema and query API before they become 1.0 public API |
 | No Docker, FrankenPHP, Makefile, MySQL or `request.http` | Package development only needs PHP and Composer in WSL; Composer scripts replace Makefile targets |
+| No Dependabot | Avoids a stream of automated PRs; dependencies are updated by hand. osv-scanner in the pre-commit hook still flags vulnerable packages |
 | `composer.lock` not committed | Library; consumers resolve their own versions |
 | CI databases: SQLite and PostgreSQL | MySQL/MariaDB jobs pending approval |
 
