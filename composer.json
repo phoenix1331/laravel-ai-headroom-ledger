@@ -1,0 +1,67 @@
+{
+    "name": "phoenix1331/laravel-ai-headroom-ledger",
+    "description": "Store and query per-request AI token usage and cost from Headroom.",
+    "keywords": [
+        "laravel",
+        "ai",
+        "llm",
+        "headroom",
+        "ledger",
+        "tokens",
+        "token-usage",
+        "cost-tracking",
+        "context-window",
+        "usage-analytics",
+        "laravel-ai-sdk"
+    ],
+    "homepage": "https://phoenix1331.github.io/laravel-ai-headroom-ledger",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Darren Williams",
+            "homepage": "https://github.com/phoenix1331"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/phoenix1331/laravel-ai-headroom-ledger/issues",
+        "source": "https://github.com/phoenix1331/laravel-ai-headroom-ledger"
+    },
+    "require": {
+        "php": "^8.3",
+        "illuminate/contracts": "^12.0|^13.0",
+        "illuminate/database": "^12.0|^13.0",
+        "illuminate/support": "^12.0|^13.0",
+        "phoenix1331/laravel-ai-headroom": "^0.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Phoenix1331\\AiHeadroomLedger\\": "src/",
+            "Phoenix1331\\AiHeadroomLedger\\Database\\Factories\\": "database/factories/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Phoenix1331\\AiHeadroomLedger\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Phoenix1331\\AiHeadroomLedger\\AiHeadroomLedgerServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "require-dev": {
+        "orchestra/testbench": "^10.0|^11.0",
+        "pestphp/pest": "^4.2|^5.0",
+        "pestphp/pest-plugin-laravel": "^4.0|^5.0"
+    }
+}

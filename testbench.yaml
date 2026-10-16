@@ -1,0 +1,7 @@
+providers:
+  - Laravel\Ai\AiServiceProvider
+  - Phoenix1331\AiHeadroom\AiHeadroomServiceProvider
+  - Phoenix1331\AiHeadroomLedger\AiHeadroomLedgerServiceProvider
+
+migrations:
+  - database/migrations
