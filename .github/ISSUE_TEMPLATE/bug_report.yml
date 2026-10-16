@@ -1,0 +1,81 @@
+name: Bug report
+description: Something is recorded wrongly, a query returns the wrong figures, or a command fails.
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Include the full exception message and stack trace if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The query or command you ran, and the events or factory data involved. Remove any real prompts, keys or personal data.
+      render: php
+    validations:
+      required: true
+  - type: input
+    id: package-version
+    attributes:
+      label: Headroom Ledger version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: headroom-version
+    attributes:
+      label: Headroom version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: laravel-version
+    attributes:
+      label: Laravel version
+      placeholder: 13.36.0
+    validations:
+      required: true
+  - type: input
+    id: php-version
+    attributes:
+      label: PHP version
+      placeholder: 8.4.26
+    validations:
+      required: true
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database
+      options:
+        - MySQL
+        - MariaDB
+        - PostgreSQL
+        - SQLite
+        - Other (say which below)
+    validations:
+      required: true
+  - type: input
+    id: database-version
+    attributes:
+      label: Database version
+      placeholder: 8.4.3
+    validations:
+      required: true
+  - type: dropdown
+    id: queue
+    attributes:
+      label: Recording mode
+      options:
+        - Queued (default)
+        - Sync
+    validations:
+      required: true

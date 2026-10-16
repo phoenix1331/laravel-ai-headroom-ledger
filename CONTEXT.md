@@ -64,6 +64,8 @@ Rows that never receive `TokensUsed` (blocked, abandoned stream, `Headroom::for(
 | `static-analysis.yml` | push/PR to `main` | Larastan with GitHub annotations |
 | `release.yml` | tag `v*` | GitHub release with notes from the matching `## [X.Y.Z]` `CHANGELOG.md` section; fails if missing |
 
+Community docs: `CONTRIBUTING.md` (setup, checks, ground rules, adding a report grouping, schema changes), `SECURITY.md` (stored vs not stored, tags as personal data, erasure, retention), `RELEASING.md` (0.x hold until `filament-headroom`), `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1). Issue templates: bug report (database type/version, recording mode), feature request; blank issues off. All export-ignored.
+
 ## Decisions
 
 | Decision | Reason |
@@ -72,6 +74,7 @@ Rows that never receive `TokensUsed` (blocked, abandoned stream, `Headroom::for(
 | Query API is the only supported read path; returns final readonly value objects, never Eloquent models | Schema can change without breaking consumers (Filament plugin included) |
 | Tags stored only for allowlisted keys, default empty | Nothing personal is recorded unless the app opts in; user IDs are personal data |
 | Never store prompt or response text | Privacy; enforced by arch tests |
+| `forgetTag()` also clears a matching `primary_tag` in daily rollups | Rollups keep only the primary tag, so erasure must reach them too; promised in `SECURITY.md` |
 | Mixed currencies are grouped per currency, never summed | No currency conversion in scope; consumers decide |
 | Aggregates read daily rollups for closed days, raw entries for today | Keeps dashboards fast without losing same-day data |
 | Stay on 0.x until `filament-headroom` is built against the ledger | The dashboard is what proves the schema and query API before they become 1.0 public API |
