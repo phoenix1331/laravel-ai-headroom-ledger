@@ -90,14 +90,23 @@ return [
     | Daily rollups
     |--------------------------------------------------------------------------
     |
-    | Aggregate queries read from daily rollups for closed days. When enabled,
-    | the rollup command is scheduled daily at the given time.
+    | Aggregate queries read closed days from daily rollups, so dashboards
+    | stay fast as the ledger grows.
+    |
+    | enabled: build and use rollups
+    | schedule: when headroom-ledger:rollup runs, as a cron expression. Each
+    |           run catches up every closed day since the last rollup (up to
+    |           31 days), so any frequency is safe, from hourly to weekly.
+    |           Set to false to schedule it yourself, for example in
+    |           routes/console.php:
+    |
+    |           Schedule::command('headroom-ledger:rollup')->hourly()->onOneServer();
     |
     */
 
     'rollup' => [
         'enabled' => env('HEADROOM_LEDGER_ROLLUP_ENABLED', true),
-        'time' => env('HEADROOM_LEDGER_ROLLUP_TIME', '00:15'),
+        'schedule' => env('HEADROOM_LEDGER_ROLLUP_SCHEDULE', '15 0 * * *'),
     ],
 
 ];

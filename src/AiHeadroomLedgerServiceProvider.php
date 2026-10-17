@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Phoenix1331\AiHeadroomLedger;
 
+use Cron\CronExpression;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\ServiceProvider;
+use InvalidArgumentException;
 use Phoenix1331\AiHeadroom\Events\HeadroomLow;
 use Phoenix1331\AiHeadroom\Events\RequestBlocked;
 use Phoenix1331\AiHeadroom\Events\RequestFailed;
@@ -52,19 +54,28 @@ class AiHeadroomLedgerServiceProvider extends ServiceProvider
     }
 
     /**
-     * Rebuild yesterday's rollups daily. One server only: each day is rebuilt
-     * as delete-then-insert, so two concurrent runs could double its rows.
+     * Schedule the rollup on the configured cron expression, unless rollups
+     * are off or the app schedules the command itself (schedule: false). One
+     * server only: each day is rebuilt as delete-then-insert, so two
+     * concurrent runs could double its rows.
      */
     private function scheduleRollups(Schedule $schedule): void
     {
         $config = $this->app->make('config');
+        $expression = $config->get('headroom-ledger.rollup.schedule', '15 0 * * *');
 
-        if (! $config->boolean('headroom-ledger.rollup.enabled', true)) {
+        if (! $config->boolean('headroom-ledger.rollup.enabled', true) || $expression === false || $expression === null || $expression === '') {
             return;
         }
 
+        if (! is_string($expression) || ! CronExpression::isValidExpression($expression)) {
+            throw new InvalidArgumentException(
+                'headroom-ledger.rollup.schedule must be a cron expression such as "15 0 * * *", or false to schedule headroom-ledger:rollup yourself.'
+            );
+        }
+
         $schedule->command(RollupCommand::class)
-            ->dailyAt($config->string('headroom-ledger.rollup.time', '00:15'))
+            ->cron($expression)
             ->withoutOverlapping()
             ->onOneServer();
     }

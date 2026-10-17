@@ -45,6 +45,7 @@ jobs:
         run: |
           composer require \
             "illuminate/contracts:^${{ matrix.laravel }}.0" \
+            "illuminate/console:^${{ matrix.laravel }}.0" \
             "illuminate/database:^${{ matrix.laravel }}.0" \
             "illuminate/support:^${{ matrix.laravel }}.0" \
             "orchestra/testbench:${{ steps.testbench.outputs.version }}" \
@@ -134,6 +135,7 @@ jobs:
         run: |
           composer require \
             "illuminate/contracts:^${{ matrix.laravel }}.0" \
+            "illuminate/console:^${{ matrix.laravel }}.0" \
             "illuminate/database:^${{ matrix.laravel }}.0" \
             "illuminate/support:^${{ matrix.laravel }}.0" \
             "orchestra/testbench:${{ steps.testbench.outputs.version }}" \

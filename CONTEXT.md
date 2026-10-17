@@ -17,7 +17,7 @@ This is a Composer **package**, not a Laravel app. There is no `app/`, no routes
 | Path | Role |
 |---|---|
 | `src/AiHeadroomLedgerServiceProvider.php` | Merges `config/headroom-ledger.php`; publish tags `headroom-ledger-config`, `headroom-ledger-migrations` |
-| `config/headroom-ledger.php` | `enabled`, `connection`, `table_prefix`, `queue` (connection `sync` records inline), `tags.allowed` (default empty), `tags.primary_tag`, `retention_days.entries`/`rollups`, `rollup.enabled`/`time` |
+| `config/headroom-ledger.php` | `enabled`, `connection`, `table_prefix`, `queue` (connection `sync` records inline), `tags.allowed` (default empty), `tags.primary_tag`, `retention_days.entries`/`rollups`, `rollup.enabled` (build and use rollups), `rollup.schedule` (cron expression, default `15 0 * * *`, or false to schedule the command yourself) |
 | `database/migrations/` | One publishable migration creating `{prefix}entries`, `{prefix}tags`, `{prefix}daily`; honours `connection` via `getConnection()` and `table_prefix`. Not auto-loaded: apps publish and migrate; tests load it in `TestCase::defineDatabaseMigrations()` |
 | `src/Models/` | `@internal` Eloquent models: `LedgerModel` (base: no timestamps, connection from config unless set explicitly), `Entry` (string PK `request_id`, enum casts for `count_method`/`outcome`, `breakdown` array, money as int), `Tag`, `DailyRollup`. Never returned by the public API |
 | `src/Recording/EntryRecorder.php` | `@internal`. One method per event; each is a single upsert keyed by `request_id` that updates only the columns that event owns. Values pass through `Entry` casts first, so privacy guards apply to upserts too. A null event value never overwrites a known one. Outcome only changes through conditional updates. Stores allowlisted context tags from `TokensCounted`, `TokensUsed` and `RequestBlocked` (one upsert per request on `(request_id, key)`). Methods: `counted()`, `used()`, `blocked()`, `warned()`, `failed()` |
@@ -30,7 +30,7 @@ This is a Composer **package**, not a Laravel app. There is no `app/`, no routes
 | `src/Query/EntryMapper.php` | `@internal`: `Entry` row to `LedgerEntry`; the only place models become public data |
 | `src/Exceptions/CurrencyMismatch.php` | Thrown when amounts in different currencies would be combined |
 | `src/Rollup/DailyRollupBuilder.php` | `@internal`. `build($day)` rebuilds one day's `{prefix}daily` rows from its entries in one transaction (delete then insert, 500-row chunks) and returns the row count |
-| `src/Console/RollupCommand.php` | `headroom-ledger:rollup`: yesterday by default, `--date=Y-m-d`, or `--from` [`--to`, default yesterday] to backfill; strict dates (2026-02-30 rejected); one line per day with row count. Scheduled by the provider via `callAfterResolving(Schedule)` at `rollup.time` when `enabled` and `rollup.enabled`, `withoutOverlapping()->onOneServer()` |
+| `src/Console/RollupCommand.php` | `headroom-ledger:rollup`: with no options catches up from the last rolled-up day (rebuilt again for late entries), else the oldest entry, to yesterday, at most 31 days; `--date=Y-m-d` for one day; `--from` [`--to`, default yesterday] to backfill further. Strict dates (2026-02-30 rejected); one line per day with row count. Scheduled by the provider via `callAfterResolving(Schedule)` with `->cron(rollup.schedule)`, `withoutOverlapping()->onOneServer()`, when `enabled` and `rollup.enabled` are true and `rollup.schedule` is not false |
 | `src/Enums/Outcome.php` | `counted`, `completed`, `warned`, `blocked`, `failed` |
 | `src/Support/` | `@internal`: `TableNames` (prefix + connection from config), `MicroUnits` (amount <-> integer millionths, rounded), `TagValue` (scalar tag value as stored and matched: string, bools `1`/`0`) |
 | `src/Support/Casts/` | `DateOnly` (stores `Y-m-d` for `occurred_on` and rollup `date`); privacy guards on `Entry`: `TokenBreakdown` (section names to whole token counts only; read back in a fixed section order), `ReasonCode` (a `LimitType` value or `ExceptionClass[:status]`; messages throw) |
@@ -62,6 +62,8 @@ Rows that never receive `TokensUsed` (blocked, abandoned stream, `Headroom::for(
 |---|---|---|
 | `php` | `^8.3` | Matches Headroom |
 | `illuminate/*` | `^12.0\|^13.0` | Matches Headroom |
+| `illuminate/console` | `^12.0\|^13.0` | Rollup command and scheduler |
+| `dragonmantank/cron-expression` | `^3.4` | Validates `rollup.schedule`; only suggested by `illuminate/console`, required by `laravel/framework` at the same constraint |
 | `phoenix1331/laravel-ai-headroom` | `^0.1` | v0.1.0 ships the event design (shared request ID, invocation ID, estimate on `TokensUsed`, cache-aware `Cost`, context tags) |
 | `orchestra/testbench` (dev) | `^10.0\|^11.0` | Testbench 10 = Laravel 12, 11 = Laravel 13 |
 | `pestphp/pest` (dev) | `^4.2\|^5.0` | Pest 4 covers PHP 8.3; same reasoning as Headroom |
@@ -145,7 +147,8 @@ Community docs: `CONTRIBUTING.md` (setup, checks, ground rules, adding a report 
 | Absolute error computed with `case when a >= b then a - b else b - a end` | MySQL errors when subtracting unsigned integers would go negative, so `abs(a - b)` is not portable |
 | `LedgerQuery::rows()` is private; `GroupedQuery` receives a closure | A public `@internal` method still let consumers reach an Eloquent builder via `Ledger::query()->rows()`; the arch test fails if it is made public again (mutation-checked) |
 | Scheduled rollups run `onOneServer()` | Each day is rebuilt as delete-then-insert, so concurrent runs on several servers could double a day's rows; needs a lock-capable cache (redis, memcached, database, dynamodb), to be noted in the README |
-| Default rollup is yesterday only; backfill with `--from` | Today is still changing and is read raw; a missed night or an outage is repaired explicitly |
+| `rollup.schedule` is a cron expression (validated with `CronExpression::isValidExpression`, invalid values throw), or false for the app to schedule `headroom-ledger:rollup` itself | Apps choose any frequency or their own scheduling; the README and docs site must say that with false they add their own cron/schedule entry |
+| A run without options catches up every closed day since the last rollup (max 31 days), rebuilding the last rolled-up day again | Any schedule is safe (hourly to weekly), late entries are picked up, and an outage repairs itself; today is never rolled up by default |
 | Mixed currencies are grouped per currency, never summed | No currency conversion in scope; consumers decide |
 | Aggregates read daily rollups for closed days, raw entries for today | Keeps dashboards fast without losing same-day data |
 | Stay on 0.x until `filament-headroom` is built against the ledger | The dashboard is what proves the schema and query API before they become 1.0 public API |

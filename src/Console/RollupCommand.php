@@ -7,16 +7,21 @@ namespace Phoenix1331\AiHeadroomLedger\Console;
 use Carbon\CarbonImmutable;
 use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Console\Command;
+use Phoenix1331\AiHeadroomLedger\Models\DailyRollup;
+use Phoenix1331\AiHeadroomLedger\Models\Entry;
 use Phoenix1331\AiHeadroomLedger\Rollup\DailyRollupBuilder;
 
 final class RollupCommand extends Command
 {
+    /** How far back a run without options catches up. Older gaps need --from. */
+    public const int CATCH_UP_DAYS = 31;
+
     protected $signature = 'headroom-ledger:rollup
         {--date= : Rebuild one day (Y-m-d)}
         {--from= : Rebuild every day from this one (Y-m-d)}
         {--to= : Last day of the range (Y-m-d); defaults to yesterday}';
 
-    protected $description = 'Build the Headroom Ledger daily rollups (yesterday by default)';
+    protected $description = 'Build the Headroom Ledger daily rollups, catching up every closed day since the last run';
 
     public function handle(DailyRollupBuilder $builder): int
     {
@@ -48,7 +53,6 @@ final class RollupCommand extends Command
      */
     private function days(): array
     {
-        $yesterday = CarbonImmutable::yesterday();
         $date = $this->option('date');
 
         if (is_string($date) && $date !== '') {
@@ -59,9 +63,22 @@ final class RollupCommand extends Command
 
         $from = $this->option('from');
         $to = $this->option('to');
-        $end = is_string($to) && $to !== '' ? self::parse($to) : $yesterday;
+        $end = is_string($to) && $to !== '' ? self::parse($to) : CarbonImmutable::yesterday();
 
-        return [is_string($from) && $from !== '' ? self::parse($from) : $end, $end];
+        return [is_string($from) && $from !== '' ? self::parse($from) : $this->catchUpFrom($end), $end];
+    }
+
+    /**
+     * The last day already rolled up (rebuilt again for late entries), else
+     * the oldest entry, no more than CATCH_UP_DAYS before $end.
+     */
+    private function catchUpFrom(CarbonImmutable $end): CarbonImmutable
+    {
+        $earliest = $end->subDays(self::CATCH_UP_DAYS - 1);
+        $last = DailyRollup::query()->max('date') ?? Entry::query()->min('occurred_on');
+        $start = is_string($last) ? CarbonImmutable::parse(substr($last, 0, 10)) : $end;
+
+        return $start->max($earliest)->min($end);
     }
 
     /**
