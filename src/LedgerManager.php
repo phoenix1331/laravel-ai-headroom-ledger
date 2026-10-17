@@ -6,9 +6,13 @@ namespace Phoenix1331\AiHeadroomLedger;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Phoenix1331\AiHeadroomLedger\Data\LedgerEntries;
+use Phoenix1331\AiHeadroomLedger\Data\LedgerEntry;
+use Phoenix1331\AiHeadroomLedger\Data\RunSummary;
 use Phoenix1331\AiHeadroomLedger\Models\DailyRollup;
 use Phoenix1331\AiHeadroomLedger\Models\Entry;
 use Phoenix1331\AiHeadroomLedger\Models\Tag;
+use Phoenix1331\AiHeadroomLedger\Query\EntryMapper;
 use Phoenix1331\AiHeadroomLedger\Support\TagValue;
 
 /**
@@ -16,6 +20,35 @@ use Phoenix1331\AiHeadroomLedger\Support\TagValue;
  */
 final class LedgerManager
 {
+    /**
+     * One request by its Headroom request ID, or null if it is not in the ledger.
+     */
+    public function find(string $requestId): ?LedgerEntry
+    {
+        $row = Entry::query()->with('tags')->find($requestId);
+
+        return $row === null ? null : EntryMapper::toEntry($row);
+    }
+
+    /**
+     * Every recorded step of one agent run, in order, with totals; null if none were recorded.
+     */
+    public function run(string $invocationId): ?RunSummary
+    {
+        $rows = Entry::query()
+            ->with('tags')
+            ->where('invocation_id', $invocationId)
+            ->orderByRaw('coalesce(counted_at, used_at)')
+            ->orderBy('request_id')
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return null;
+        }
+
+        return RunSummary::of($invocationId, new LedgerEntries($rows->map(EntryMapper::toEntry(...))));
+    }
+
     /**
      * Forget a data subject: delete every tag with this key and value, give
      * the runs those entries belong to fresh invocation IDs (so steps still

@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Facade;
 use Phoenix1331\AiHeadroomLedger\LedgerManager;
 
 /**
+ * @method static \Phoenix1331\AiHeadroomLedger\Data\LedgerEntry|null find(string $requestId)
+ * @method static \Phoenix1331\AiHeadroomLedger\Data\RunSummary|null run(string $invocationId)
  * @method static int forgetTag(string $key, string|int|float|bool $value)
  *
  * @see LedgerManager

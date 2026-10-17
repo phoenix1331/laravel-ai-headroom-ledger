@@ -22,3 +22,9 @@ arch('casts are final')
     ->expect('Phoenix1331\AiHeadroomLedger\Support')
     ->classes()
     ->toBeFinal();
+
+arch('value objects are final and readonly')
+    ->expect('Phoenix1331\AiHeadroomLedger\Data')
+    ->classes()
+    ->toBeFinal()
+    ->toBeReadonly();
