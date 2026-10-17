@@ -20,6 +20,19 @@ abstract class TestCase extends Orchestra
         Http::preventStrayRequests();
     }
 
+    protected function tearDown(): void
+    {
+        // Tests may point the ledger at another connection or prefix. Restore the defaults before
+        // Testbench rolls the migrations back, or a persistent database (MySQL, PostgreSQL)
+        // keeps the real tables into the next test.
+        $this->app?->make('config')->set([
+            'headroom-ledger.connection' => null,
+            'headroom-ledger.table_prefix' => 'headroom_ledger_',
+        ]);
+
+        parent::tearDown();
+    }
+
     protected function defineDatabaseMigrations(): void
     {
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');

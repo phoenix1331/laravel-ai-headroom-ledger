@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Phoenix1331\AiHeadroom\Enums\CountMethod;
 use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
@@ -31,7 +32,8 @@ it('round-trips an entry through its casts', function (): void {
     expect($entry)
         ->count_method->toBe(CountMethod::Calibrated)
         ->outcome->toBe(Outcome::Counted)
-        ->breakdown->toBe(['instructions' => 400, 'history' => 600, 'tools' => 0, 'attachments' => 0, 'prompt' => 200])
+        // MySQL's JSON type reorders keys, so compare contents rather than order.
+        ->breakdown->toEqual(['instructions' => 400, 'history' => 600, 'tools' => 0, 'attachments' => 0, 'prompt' => 200])
         ->percent_used->toBe(0.6)
         ->estimated_cost->toBe(3600)
         ->actual_cost->toBeNull()
@@ -112,7 +114,7 @@ it('uses the configured connection', function (): void {
 
     expect((new Entry)->getConnectionName())->toBe('ledger')
         ->and(Entry::query()->count())->toBe(1)
-        ->and(Entry::on('testing')->count())->toBe(0);
+        ->and(Entry::on(DB::getDefaultConnection())->count())->toBe(0);
 });
 
 it('uses the default connection when none is configured', function (): void {

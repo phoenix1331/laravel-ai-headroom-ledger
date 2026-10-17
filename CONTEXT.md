@@ -84,6 +84,8 @@ Community docs: `CONTRIBUTING.md` (setup, checks, ground rules, adding a report 
 | `DB_FOREIGN_KEYS=true` in `phpunit.xml` | Testbench's in-memory `testing` connection disables SQLite foreign keys by default; real apps have them on, and tag cascade deletes depend on them |
 | Internal models are `Entry`, `Tag`, `DailyRollup`, not `LedgerEntry` | `LedgerEntry` is reserved for the public value object returned by `Ledger::find()` |
 | `currency` stays a plain 3-letter string on models, not Headroom's `Currency` enum | Headroom's enum only has USD and GBP; old rows must still load if it changes |
+| `TestCase::tearDown()` resets `headroom-ledger.connection` and `table_prefix` before `parent::tearDown()` | Testbench rolls migrations back in a callback registered before `defineDatabaseMigrations()`, so a test that changed either would roll back the wrong tables and leak them into the next test on a persistent database |
+| `breakdown` key order is not guaranteed | MySQL's JSON type reorders keys; the public value object must normalise the order |
 | Query API is the only supported read path; returns final readonly value objects, never Eloquent models | Schema can change without breaking consumers (Filament plugin included) |
 | Tags stored only for allowlisted keys, default empty | Nothing personal is recorded unless the app opts in; user IDs are personal data |
 | Never store prompt or response text | Privacy; enforced by arch tests |
