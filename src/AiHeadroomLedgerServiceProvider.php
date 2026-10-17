@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Phoenix1331\AiHeadroomLedger;
 
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\ServiceProvider;
+use Phoenix1331\AiHeadroom\Events\TokensCounted;
+use Phoenix1331\AiHeadroomLedger\Listeners\RecordTokensCounted;
 
 class AiHeadroomLedgerServiceProvider extends ServiceProvider
 {
@@ -22,5 +25,14 @@ class AiHeadroomLedgerServiceProvider extends ServiceProvider
         $this->publishesMigrations([
             __DIR__.'/../database/migrations' => database_path('migrations'),
         ], 'headroom-ledger-migrations');
+
+        if ($this->app->make('config')->boolean('headroom-ledger.enabled', true)) {
+            $this->registerListeners($this->app->make(Dispatcher::class));
+        }
+    }
+
+    private function registerListeners(Dispatcher $events): void
+    {
+        $events->listen(TokensCounted::class, RecordTokensCounted::class);
     }
 }

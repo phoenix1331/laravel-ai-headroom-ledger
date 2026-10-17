@@ -20,6 +20,8 @@ This is a Composer **package**, not a Laravel app. There is no `app/`, no routes
 | `config/headroom-ledger.php` | `enabled`, `connection`, `table_prefix`, `queue` (connection `sync` records inline), `tags.allowed` (default empty), `tags.primary_tag`, `retention_days.entries`/`rollups`, `rollup.enabled`/`time` |
 | `database/migrations/` | One publishable migration creating `{prefix}entries`, `{prefix}tags`, `{prefix}daily`; honours `connection` via `getConnection()` and `table_prefix`. Not auto-loaded: apps publish and migrate; tests load it in `TestCase::defineDatabaseMigrations()` |
 | `src/Models/` | `@internal` Eloquent models: `LedgerModel` (base: no timestamps, connection from config unless set explicitly), `Entry` (string PK `request_id`, enum casts for `count_method`/`outcome`, `breakdown` array, money as int), `Tag`, `DailyRollup`. Never returned by the public API |
+| `src/Recording/EntryRecorder.php` | `@internal`. One method per event; each is a single upsert keyed by `request_id` that updates only the columns that event owns. Values pass through `Entry` casts first, so privacy guards apply to upserts too. Built: `counted()` |
+| `src/Listeners/` | Thin listeners delegating to `EntryRecorder`, registered in the provider when `enabled` is true at boot. Built: `RecordTokensCounted` |
 | `src/Enums/Outcome.php` | `counted`, `completed`, `warned`, `blocked`, `failed` |
 | `src/Support/` | `@internal`: `TableNames` (prefix + connection from config), `MicroUnits` (amount <-> integer millionths, rounded) |
 | `src/Support/Casts/` | Privacy guards on `Entry`: `TokenBreakdown` (section names to whole token counts only; read back in a fixed section order), `ReasonCode` (a `LimitType` value or `ExceptionClass[:status]`; messages throw) |
@@ -94,6 +96,8 @@ Community docs: `CONTRIBUTING.md` (setup, checks, ground rules, adding a report 
 | `outcome_reason` for failures is `ExceptionClass:status` (class alone when no status) | Exception class and HTTP status only, never the message; one string column, easy to group |
 | Privacy is enforced at write time by model casts, not only by listener code | A listener bug or a future contributor cannot store text in `breakdown` or `outcome_reason`; tags remain the only free-form values and are allowlisted |
 | Adding a ledger column means updating `tests/Feature/Privacy/SchemaPrivacyTest.php` | Forces a deliberate review that the column cannot hold text |
+| Out-of-order safety comes from column ownership, not reads: each upsert writes only its event's columns, and `outcome` is set on insert only by `TokensCounted` | No read-then-write race between queue workers; a late count cannot downgrade `completed`, `warned`, `blocked` or `failed` |
+| `percent_used` capped at 99,999.99 | A huge overflow (e.g. 50M tokens in an 8k window) would otherwise exceed `decimal(7,2)` |
 | Query API is the only supported read path; returns final readonly value objects, never Eloquent models | Schema can change without breaking consumers (Filament plugin included) |
 | Tags stored only for allowlisted keys, default empty | Nothing personal is recorded unless the app opts in; user IDs are personal data |
 | Never store prompt or response text | Privacy; enforced by arch tests |

@@ -86,7 +86,7 @@ class LedgerEntryFactory extends Factory
             'currency' => 'USD',
             'outcome' => Outcome::Completed,
             'counted_at' => $countedAt,
-            'used_at' => $countedAt,
+            'used_at' => $countedAt->copy()->addSeconds(random_int(1, 40)),
         ];
     }
 
@@ -196,7 +196,8 @@ class LedgerEntryFactory extends Factory
                 'invocation_id' => $invocationId ?? (string) Str::uuid7(),
                 'agent' => $agent ?? Arr::random(self::AGENTS),
             ])
-            ->sequence(fn (Sequence $sequence): array => self::timing($start->copy()->addMinutes($sequence->index)));
+            ->sequence(fn (Sequence $sequence): array => ['counted_at' => $start->copy()->addMinutes($sequence->index)])
+            ->state(fn (array $attributes): array => self::timing(Carbon::parse(self::stringOrDate($attributes['counted_at'] ?? null)), $attributes));
     }
 
     public function forAgent(string $agent): static
@@ -227,7 +228,7 @@ class LedgerEntryFactory extends Factory
 
     public function at(DateTimeInterface $countedAt): static
     {
-        return $this->state(fn (): array => self::timing(Carbon::instance($countedAt)));
+        return $this->state(fn (array $attributes): array => self::timing(Carbon::instance($countedAt), $attributes));
     }
 
     /**
@@ -275,8 +276,6 @@ class LedgerEntryFactory extends Factory
             return;
         }
 
-        $entry->used_at = $countedAt->addSeconds(random_int(1, 40));
-
         $entry->provider_used ??= $entry->provider_counted;
         $entry->model_used ??= $entry->model_counted;
         $entry->actual_input_tokens ??= (int) round($entry->estimated_input_tokens * random_int(90, 110) / 100);
@@ -314,13 +313,22 @@ class LedgerEntryFactory extends Factory
         return (int) round($inputTokens * $spec['input'] + $outputTokens * $spec['output']);
     }
 
-    /**
-     * Usage, when there is any, is re-timed from counted_at in derive().
-     *
-     * @return array{counted_at: Carbon}
-     */
-    private static function timing(Carbon $countedAt): array
+    private static function stringOrDate(mixed $value): DateTimeInterface|string
     {
-        return ['counted_at' => $countedAt];
+        return $value instanceof DateTimeInterface || is_string($value) ? $value : 'now';
+    }
+
+    /**
+     * Move an entry to a new time, keeping any usage a few seconds after it.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return array{counted_at: Carbon, used_at: Carbon|null}
+     */
+    private static function timing(Carbon $countedAt, array $attributes): array
+    {
+        return [
+            'counted_at' => $countedAt,
+            'used_at' => ($attributes['used_at'] ?? null) === null ? null : $countedAt->copy()->addSeconds(random_int(1, 40)),
+        ];
     }
 }
