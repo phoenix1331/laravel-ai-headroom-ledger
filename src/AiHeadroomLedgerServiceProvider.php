@@ -7,7 +7,9 @@ namespace Phoenix1331\AiHeadroomLedger;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\ServiceProvider;
 use Phoenix1331\AiHeadroom\Events\TokensCounted;
+use Phoenix1331\AiHeadroom\Events\TokensUsed;
 use Phoenix1331\AiHeadroomLedger\Listeners\RecordTokensCounted;
+use Phoenix1331\AiHeadroomLedger\Listeners\RecordTokensUsed;
 
 class AiHeadroomLedgerServiceProvider extends ServiceProvider
 {
@@ -34,5 +36,6 @@ class AiHeadroomLedgerServiceProvider extends ServiceProvider
     private function registerListeners(Dispatcher $events): void
     {
         $events->listen(TokensCounted::class, RecordTokensCounted::class);
+        $events->listen(TokensUsed::class, RecordTokensUsed::class);
     }
 }
