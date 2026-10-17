@@ -75,14 +75,25 @@ return [
     | Retention
     |--------------------------------------------------------------------------
     |
-    | Days to keep raw entries and daily rollups before pruning. Null keeps
-    | them forever.
+    | Days to keep raw entries and daily rollups. Null keeps them forever.
+    | Keep rollups longer than entries for cheap long-term totals: once a
+    | day's entries are pruned, its totals come from rollups.
+    |
+    | schedule: when headroom-ledger:prune runs, as a cron expression. It
+    |           rolls up any day it is about to prune that has no rollup yet.
+    |           Set to false to schedule it yourself, for example:
+    |
+    |           Schedule::command('headroom-ledger:prune')->daily()->onOneServer();
     |
     */
 
     'retention_days' => [
         'entries' => env('HEADROOM_LEDGER_RETENTION_ENTRIES', 90),
         'rollups' => env('HEADROOM_LEDGER_RETENTION_ROLLUPS', 730),
+    ],
+
+    'prune' => [
+        'schedule' => env('HEADROOM_LEDGER_PRUNE_SCHEDULE', '30 0 * * *'),
     ],
 
     /*

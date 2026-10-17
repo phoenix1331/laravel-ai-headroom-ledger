@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Phoenix1331\AiHeadroomLedger\Models;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Phoenix1331\AiHeadroom\Enums\CountMethod;
 use Phoenix1331\AiHeadroomLedger\Database\Factories\LedgerEntryFactory;
@@ -13,6 +15,7 @@ use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
 use Phoenix1331\AiHeadroomLedger\Support\Casts\DateOnly;
 use Phoenix1331\AiHeadroomLedger\Support\Casts\ReasonCode;
 use Phoenix1331\AiHeadroomLedger\Support\Casts\TokenBreakdown;
+use Phoenix1331\AiHeadroomLedger\Support\Retention;
 use Phoenix1331\AiHeadroomLedger\Support\TableNames;
 
 /**
@@ -53,6 +56,8 @@ class Entry extends LedgerModel
     /** @use HasFactory<LedgerEntryFactory> */
     use HasFactory;
 
+    use MassPrunable;
+
     protected $primaryKey = 'request_id';
 
     protected $keyType = 'string';
@@ -68,6 +73,22 @@ class Entry extends LedgerModel
     public function getTable(): string
     {
         return TableNames::entries();
+    }
+
+    /**
+     * Entries from days before the entry retention cut-off. Use
+     * headroom-ledger:prune, which rolls those days up first and removes
+     * their tags; model:prune relies on the foreign key cascade for tags.
+     *
+     * @return Builder<static>
+     */
+    public function prunable(): Builder
+    {
+        $cutoff = Retention::entriesCutoff();
+
+        return $cutoff === null
+            ? static::query()->whereRaw('1 = 0')
+            : static::query()->where('occurred_on', '<', $cutoff);
     }
 
     protected static function newFactory(): LedgerEntryFactory

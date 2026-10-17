@@ -42,7 +42,11 @@ final class RollupCommand extends Command
         for ($day = $from; $day <= $to; $day = $day->addDay()) {
             $rows = $builder->build($day);
 
-            $this->components->twoColumnDetail($day->toDateString(), $rows === 1 ? '1 row' : "{$rows} rows");
+            $this->components->twoColumnDetail($day->toDateString(), match ($rows) {
+                null => 'kept: entries already pruned',
+                1 => '1 row',
+                default => "{$rows} rows",
+            });
         }
 
         return self::SUCCESS;

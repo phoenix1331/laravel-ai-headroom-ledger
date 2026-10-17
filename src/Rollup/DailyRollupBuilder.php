@@ -9,6 +9,7 @@ use Illuminate\Database\Query\JoinClause;
 use Phoenix1331\AiHeadroomLedger\Models\DailyRollup;
 use Phoenix1331\AiHeadroomLedger\Models\Entry;
 use Phoenix1331\AiHeadroomLedger\Models\RollupDay;
+use Phoenix1331\AiHeadroomLedger\Support\Retention;
 use Phoenix1331\AiHeadroomLedger\Support\TableNames;
 
 /**
@@ -70,11 +71,18 @@ final class DailyRollupBuilder
     /**
      * Rebuild one day's rollup rows.
      *
-     * @return int The number of rollup rows written.
+     * @return int|null The number of rollup rows written, or null when the day
+     *                  was skipped: it is older than entry retention and already
+     *                  rolled up, so its entries are gone and a rebuild would zero it.
      */
-    public function build(DateTimeInterface|string $day): int
+    public function build(DateTimeInterface|string $day): ?int
     {
         $date = is_string($day) ? substr($day, 0, 10) : $day->format('Y-m-d');
+        $entriesCutoff = Retention::entriesCutoff();
+
+        if ($entriesCutoff !== null && $date < $entriesCutoff && RollupDay::query()->whereKey($date)->exists()) {
+            return null;
+        }
         $primaryTag = TableNames::primaryTag();
 
         $query = Entry::query()->toBase()

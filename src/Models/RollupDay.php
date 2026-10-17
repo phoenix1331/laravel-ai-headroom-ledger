@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Phoenix1331\AiHeadroomLedger\Models;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Phoenix1331\AiHeadroomLedger\Support\Casts\DateOnly;
+use Phoenix1331\AiHeadroomLedger\Support\Retention;
 use Phoenix1331\AiHeadroomLedger\Support\TableNames;
 
 /**
@@ -21,6 +24,8 @@ use Phoenix1331\AiHeadroomLedger\Support\TableNames;
  */
 class RollupDay extends LedgerModel
 {
+    use MassPrunable;
+
     protected $primaryKey = 'date';
 
     protected $keyType = 'string';
@@ -30,6 +35,20 @@ class RollupDay extends LedgerModel
     public function getTable(): string
     {
         return TableNames::rollupDays();
+    }
+
+    /**
+     * Rolled-up days before the rollup retention cut-off, pruned with their rollups.
+     *
+     * @return Builder<static>
+     */
+    public function prunable(): Builder
+    {
+        $cutoff = Retention::rollupsCutoff();
+
+        return $cutoff === null
+            ? static::query()->whereRaw('1 = 0')
+            : static::query()->where('date', '<', $cutoff);
     }
 
     /**
