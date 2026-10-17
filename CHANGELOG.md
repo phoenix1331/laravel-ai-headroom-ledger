@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-17
+
+First release.
+
 ### Added
 
 - Records every provider call that Headroom (`phoenix1331/laravel-ai-headroom` ^0.1) sees as one ledger row: the pre-flight estimate and per-part breakdown, the tokens actually used (input, output, cache read and cache write), estimated and actual cost, context window and percentage used, and whether it was completed, warned, blocked or failed. Starts recording once installed; no code changes beyond Headroom's own setup
@@ -25,4 +29,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Publishable, database-agnostic migrations (`headroom-ledger-migrations`), tested on SQLite, PostgreSQL, MySQL and MariaDB, with an optional separate `connection` and `table_prefix`
 - `LedgerEntryFactory` with states for every outcome (`counted`, `completed`, `warned`, `blocked`, `failed`, `streamed`, `abandoned`, `approximateCost`, `failover`, `inRun`) for seeding demos and testing apps and dashboards, with no Faker dependency
 
-[Unreleased]: https://github.com/phoenix1331/laravel-ai-headroom-ledger/commits/main
+[Unreleased]: https://github.com/phoenix1331/laravel-ai-headroom-ledger/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/phoenix1331/laravel-ai-headroom-ledger/releases/tag/v0.1.0
