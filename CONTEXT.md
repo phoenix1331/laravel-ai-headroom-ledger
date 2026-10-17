@@ -22,7 +22,7 @@ This is a Composer **package**, not a Laravel app. There is no `app/`, no routes
 | `src/Models/` | `@internal` Eloquent models: `LedgerModel` (base: no timestamps, connection from config unless set explicitly), `Entry` (string PK `request_id`, enum casts for `count_method`/`outcome`, `breakdown` array, money as int), `Tag`, `DailyRollup`. Never returned by the public API |
 | `src/Enums/Outcome.php` | `counted`, `completed`, `warned`, `blocked`, `failed` |
 | `src/Support/` | `@internal`: `TableNames` (prefix + connection from config), `MicroUnits` (amount <-> integer millionths, rounded) |
-| `database/factories/` | `LedgerEntryFactory`, shipped for the Filament plugin and app seeding |
+| `database/factories/LedgerEntryFactory.php` | Public, shipped for the Filament plugin and app seeding (`Entry::factory()` or `LedgerEntryFactory::new()`). Default is a completed request; states `counted`, `completed`, `warned`, `blocked`, `failed`, `streamed`, `abandoned`, `approximateCost`, `failover`, `inRun`, `forAgent`, `forModel`, `countMethod`, `inCurrency`, `at`, `withTags`. No Faker |
 | `tests/` | Pest + Testbench; `TestCase` loads laravel/ai, Headroom and the ledger, blocks stray HTTP |
 | `testbench.yaml` | Providers and migrations for `vendor/bin/testbench` (manual artisan runs, smoke test) |
 
@@ -86,6 +86,9 @@ Community docs: `CONTRIBUTING.md` (setup, checks, ground rules, adding a report 
 | `currency` stays a plain 3-letter string on models, not Headroom's `Currency` enum | Headroom's enum only has USD and GBP; old rows must still load if it changes |
 | `TestCase::tearDown()` resets `headroom-ledger.connection` and `table_prefix` before `parent::tearDown()` | Testbench rolls migrations back in a callback registered before `defineDatabaseMigrations()`, so a test that changed either would roll back the wrong tables and leak them into the next test on a persistent database |
 | `breakdown` key order is not guaranteed | MySQL's JSON type reorders keys; the public value object must normalise the order |
+| Factory states set only what they change; one `afterMaking` pass derives breakdown, percent used, usage, costs and dates | Any combination of states stays internally consistent (estimate = breakdown sum, costs follow tokens and the answering model's price) |
+| Factory uses `random_int()` and fixed model data, not Faker | Faker is usually a dev dependency; apps can seed demo data anywhere |
+| `outcome_reason` for failures is `ExceptionClass:status` (class alone when no status) | Exception class and HTTP status only, never the message; one string column, easy to group |
 | Query API is the only supported read path; returns final readonly value objects, never Eloquent models | Schema can change without breaking consumers (Filament plugin included) |
 | Tags stored only for allowlisted keys, default empty | Nothing personal is recorded unless the app opts in; user IDs are personal data |
 | Never store prompt or response text | Privacy; enforced by arch tests |

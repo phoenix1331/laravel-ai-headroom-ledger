@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Phoenix1331\AiHeadroomLedger\Models;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Phoenix1331\AiHeadroom\Enums\CountMethod;
+use Phoenix1331\AiHeadroomLedger\Database\Factories\LedgerEntryFactory;
 use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
 use Phoenix1331\AiHeadroomLedger\Support\TableNames;
 
@@ -44,6 +46,9 @@ use Phoenix1331\AiHeadroomLedger\Support\TableNames;
  */
 class Entry extends LedgerModel
 {
+    /** @use HasFactory<LedgerEntryFactory> */
+    use HasFactory;
+
     protected $primaryKey = 'request_id';
 
     protected $keyType = 'string';
@@ -59,6 +64,11 @@ class Entry extends LedgerModel
     public function getTable(): string
     {
         return TableNames::entries();
+    }
+
+    protected static function newFactory(): LedgerEntryFactory
+    {
+        return LedgerEntryFactory::new();
     }
 
     /**
