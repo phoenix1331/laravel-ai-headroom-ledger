@@ -6,6 +6,9 @@ namespace Phoenix1331\AiHeadroomLedger\Query;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\JoinClause;
+use Phoenix1331\AiHeadroom\Enums\CountMethod;
+use Phoenix1331\AiHeadroomLedger\Data\AccuracyStat;
+use Phoenix1331\AiHeadroomLedger\Data\AccuracyStats;
 use Phoenix1331\AiHeadroomLedger\Data\Money;
 use Phoenix1331\AiHeadroomLedger\Data\Spend;
 use Phoenix1331\AiHeadroomLedger\Data\SpendSummary;
@@ -33,6 +36,17 @@ final class Aggregator
         .'sum(case when actual_cost is not null and cost_approximate then 1 else 0 end) as approximate_requests, '
         .'sum(case when actual_cost is null and estimated_cost is not null then 1 else 0 end) as estimate_only_requests, '
         .'coalesce(sum(case when actual_cost is null then estimated_cost else 0 end), 0) as estimate_only_cost';
+
+    /**
+     * Accuracy sums. The absolute error avoids abs(a - b), which MySQL rejects
+     * when subtracting unsigned integers would go below zero.
+     */
+    private const string ACCURACY = 'model_counted, count_method, count(*) as samples, '
+        .'sum(estimated_input_tokens) as estimated_tokens, '
+        .'sum(actual_input_tokens) as actual_tokens, '
+        .'sum(case when actual_input_tokens >= estimated_input_tokens '
+        .'then actual_input_tokens - estimated_input_tokens '
+        .'else estimated_input_tokens - actual_input_tokens end) as absolute_error';
 
     /** Joined tag table alias for byTag(). */
     private const string TAG = 'ledger_group_tag';
@@ -70,6 +84,43 @@ final class Aggregator
         }
 
         return $groups;
+    }
+
+    /**
+     * Estimate against actual input tokens, per counted model and count method,
+     * for requests that reported usage from the model that was counted.
+     *
+     * @param  Builder<Entry>  $rows
+     */
+    public static function accuracy(Builder $rows): AccuracyStats
+    {
+        $results = $rows->toBase()
+            ->selectRaw(self::ACCURACY)
+            ->whereNotNull('estimated_input_tokens')
+            ->whereNotNull('actual_input_tokens')
+            ->whereNotNull('model_counted')
+            ->whereColumn('model_used', 'model_counted')
+            ->groupBy('model_counted', 'count_method')
+            ->get();
+
+        $stats = [];
+
+        foreach ($results as $row) {
+            /** @var array<string, mixed> $row */
+            $row = (array) $row;
+            $method = $row['count_method'] ?? null;
+
+            $stats[] = new AccuracyStat(
+                is_scalar($row['model_counted'] ?? null) ? (string) $row['model_counted'] : null,
+                is_string($method) ? CountMethod::tryFrom($method) : null,
+                self::int($row, 'samples'),
+                self::int($row, 'estimated_tokens'),
+                self::int($row, 'actual_tokens'),
+                self::int($row, 'absolute_error'),
+            );
+        }
+
+        return new AccuracyStats($stats);
     }
 
     /**

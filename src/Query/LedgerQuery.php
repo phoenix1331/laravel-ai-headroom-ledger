@@ -9,6 +9,7 @@ use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use InvalidArgumentException;
+use Phoenix1331\AiHeadroomLedger\Data\AccuracyStats;
 use Phoenix1331\AiHeadroomLedger\Data\LedgerEntries;
 use Phoenix1331\AiHeadroomLedger\Data\SpendSummary;
 use Phoenix1331\AiHeadroomLedger\Data\TokenTotals;
@@ -164,6 +165,16 @@ final class LedgerQuery
     public function tokens(): TokenTotals
     {
         return Aggregator::totals($this->rows())['']['tokens'] ?? new TokenTotals;
+    }
+
+    /**
+     * How close Headroom's estimates came to reported input tokens, per counted
+     * model and count method. Only requests that reported usage from the model
+     * that was counted take part; failover answers are left out.
+     */
+    public function accuracy(): AccuracyStats
+    {
+        return Aggregator::accuracy($this->rows());
     }
 
     /**
