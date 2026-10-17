@@ -5,14 +5,21 @@ declare(strict_types=1);
 namespace Phoenix1331\AiHeadroomLedger\Listeners;
 
 use Phoenix1331\AiHeadroom\Events\RequestBlocked;
-use Phoenix1331\AiHeadroomLedger\Recording\EntryRecorder;
 
-final class RecordRequestBlocked
+/**
+ * Records a request blocked before sending.
+ *
+ * @extends RecordsToLedger<RequestBlocked>
+ */
+final class RecordRequestBlocked extends RecordsToLedger
 {
-    public function __construct(private readonly EntryRecorder $recorder) {}
-
-    public function handle(RequestBlocked $event): void
+    protected function record(object $event): void
     {
         $this->recorder->blocked($event);
+    }
+
+    protected function requestId(object $event): string
+    {
+        return $event->requestId;
     }
 }

@@ -5,14 +5,26 @@ declare(strict_types=1);
 namespace Phoenix1331\AiHeadroomLedger\Listeners;
 
 use Phoenix1331\AiHeadroom\Events\TokensUsed;
-use Phoenix1331\AiHeadroomLedger\Recording\EntryRecorder;
 
-final class RecordTokensUsed
+/**
+ * Records the provider's reported usage and actual cost.
+ *
+ * @extends RecordsToLedger<TokensUsed>
+ */
+final class RecordTokensUsed extends RecordsToLedger
 {
-    public function __construct(private readonly EntryRecorder $recorder) {}
-
-    public function handle(TokensUsed $event): void
+    protected function record(object $event): void
     {
         $this->recorder->used($event);
+    }
+
+    protected function requestId(object $event): string
+    {
+        return $event->requestId;
+    }
+
+    protected function completes(): bool
+    {
+        return true;
     }
 }

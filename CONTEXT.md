@@ -21,7 +21,8 @@ This is a Composer **package**, not a Laravel app. There is no `app/`, no routes
 | `database/migrations/` | One publishable migration creating `{prefix}entries`, `{prefix}tags`, `{prefix}daily`; honours `connection` via `getConnection()` and `table_prefix`. Not auto-loaded: apps publish and migrate; tests load it in `TestCase::defineDatabaseMigrations()` |
 | `src/Models/` | `@internal` Eloquent models: `LedgerModel` (base: no timestamps, connection from config unless set explicitly), `Entry` (string PK `request_id`, enum casts for `count_method`/`outcome`, `breakdown` array, money as int), `Tag`, `DailyRollup`. Never returned by the public API |
 | `src/Recording/EntryRecorder.php` | `@internal`. One method per event; each is a single upsert keyed by `request_id` that updates only the columns that event owns. Values pass through `Entry` casts first, so privacy guards apply to upserts too. A null event value never overwrites a known one. Outcome only changes through conditional updates. Methods: `counted()`, `used()`, `blocked()`, `warned()`, `failed()` |
-| `src/Listeners/` | Thin listeners delegating to `EntryRecorder`, registered in the provider when `enabled` is true at boot. `RecordTokensCounted`, `RecordTokensUsed`, `RecordRequestBlocked`, `RecordHeadroomLow`, `RecordRequestFailed` |
+| `src/Listeners/` | `RecordsToLedger` (abstract, `ShouldQueue`, 3 tries with 5/30/120 s backoff, connection and queue from `headroom-ledger.queue`) and one thin subclass per Headroom event: `RecordTokensCounted`, `RecordTokensUsed`, `RecordRequestBlocked`, `RecordHeadroomLow`, `RecordRequestFailed`. Registered in the provider when `enabled` is true at boot; `enabled` is checked again on each run |
+| `src/Events/` | Public API: `LedgerEntryRecorded` (after every write) and `LedgerEntryCompleted` (after usage is recorded), both final readonly with `requestId`, `invocationId`, `outcome`; never an Eloquent model |
 | `src/Enums/Outcome.php` | `counted`, `completed`, `warned`, `blocked`, `failed` |
 | `src/Support/` | `@internal`: `TableNames` (prefix + connection from config), `MicroUnits` (amount <-> integer millionths, rounded) |
 | `src/Support/Casts/` | Privacy guards on `Entry`: `TokenBreakdown` (section names to whole token counts only; read back in a fixed section order), `ReasonCode` (a `LimitType` value or `ExceptionClass[:status]`; messages throw) |
@@ -102,6 +103,10 @@ Community docs: `CONTRIBUTING.md` (setup, checks, ground rules, adding a report 
 | Several warnings keep the highest-ranked limit in `LimitType::cases()` order | Deterministic reason regardless of arrival order |
 | `outcome_reason` holds the `LimitType` value for warned/blocked, never `HeadroomLow`'s generated description | Codes only; the `ReasonCode` cast would reject prose |
 | `RequestBlocked` writes the count it carries as insert-only | `TokensCounted` owns the count columns (e.g. `counted_at`); the block's copy only fills a row nothing else has created |
+| Inline recording (`sync` connection, configured or the app default) reports failures instead of throwing; queued recording throws so the job retries | The ledger must never break the AI request that triggered it |
+| `viaConnection()`/`viaQueue()` read config via `config()`, not injected services | Laravel calls them on an instance built with `newInstanceWithoutConstructor()` |
+| Public ledger events read the row back only when something listens for them | No extra query per Headroom event for apps that do not use them |
+| `LedgerEntryRecorded` fires per write, not once per request | Insert vs update cannot be told apart portably from an upsert; consumers get the current outcome each time |
 | Upsert with no owned non-null columns uses `insertOrIgnore` | Laravel turns `upsert()` with an empty update list into a plain insert, which fails on an existing row |
 | `streamed` is only known from `TokensUsed` | An abandoned stream never reports usage, so it stays `counted` with `streamed` false |
 | Local PostgreSQL check: throwaway `php:8.4-cli` image with `pdo_pgsql` built from stdin, nothing in the repo | Host PHP has no `pdo_pgsql`; upsert SQL differs most on PostgreSQL |

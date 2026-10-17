@@ -5,14 +5,21 @@ declare(strict_types=1);
 namespace Phoenix1331\AiHeadroomLedger\Listeners;
 
 use Phoenix1331\AiHeadroom\Events\HeadroomLow;
-use Phoenix1331\AiHeadroomLedger\Recording\EntryRecorder;
 
-final class RecordHeadroomLow
+/**
+ * Records a request allowed through despite a breached limit.
+ *
+ * @extends RecordsToLedger<HeadroomLow>
+ */
+final class RecordHeadroomLow extends RecordsToLedger
 {
-    public function __construct(private readonly EntryRecorder $recorder) {}
-
-    public function handle(HeadroomLow $event): void
+    protected function record(object $event): void
     {
         $this->recorder->warned($event);
+    }
+
+    protected function requestId(object $event): string
+    {
+        return $event->requestId;
     }
 }
