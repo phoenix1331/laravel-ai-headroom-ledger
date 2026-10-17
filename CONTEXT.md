@@ -19,6 +19,9 @@ This is a Composer **package**, not a Laravel app. There is no `app/`, no routes
 | `src/AiHeadroomLedgerServiceProvider.php` | Merges `config/headroom-ledger.php`; publish tags `headroom-ledger-config`, `headroom-ledger-migrations` |
 | `config/headroom-ledger.php` | `enabled`, `connection`, `table_prefix`, `queue` (connection `sync` records inline), `tags.allowed` (default empty), `tags.primary_tag`, `retention_days.entries`/`rollups`, `rollup.enabled`/`time` |
 | `database/migrations/` | One publishable migration creating `{prefix}entries`, `{prefix}tags`, `{prefix}daily`; honours `connection` via `getConnection()` and `table_prefix`. Not auto-loaded: apps publish and migrate; tests load it in `TestCase::defineDatabaseMigrations()` |
+| `src/Models/` | `@internal` Eloquent models: `LedgerModel` (base: no timestamps, connection from config unless set explicitly), `Entry` (string PK `request_id`, enum casts for `count_method`/`outcome`, `breakdown` array, money as int), `Tag`, `DailyRollup`. Never returned by the public API |
+| `src/Enums/Outcome.php` | `counted`, `completed`, `warned`, `blocked`, `failed` |
+| `src/Support/` | `@internal`: `TableNames` (prefix + connection from config), `MicroUnits` (amount <-> integer millionths, rounded) |
 | `database/factories/` | `LedgerEntryFactory`, shipped for the Filament plugin and app seeding |
 | `tests/` | Pest + Testbench; `TestCase` loads laravel/ai, Headroom and the ledger, blocks stray HTTP |
 | `testbench.yaml` | Providers and migrations for `vendor/bin/testbench` (manual artisan runs, smoke test) |
@@ -79,6 +82,8 @@ Community docs: `CONTRIBUTING.md` (setup, checks, ground rules, adding a report 
 | `percent_used` is `decimal(7,2)`; daily keeps sum, max and sample count | Exact on every driver and can exceed 100 for blocked requests; averages come from sum/count, not `AVG()` |
 | Index and foreign key names are explicit, built from `table_prefix` plus a short suffix | MySQL caps names at 64 chars; PostgreSQL needs them unique per schema |
 | `DB_FOREIGN_KEYS=true` in `phpunit.xml` | Testbench's in-memory `testing` connection disables SQLite foreign keys by default; real apps have them on, and tag cascade deletes depend on them |
+| Internal models are `Entry`, `Tag`, `DailyRollup`, not `LedgerEntry` | `LedgerEntry` is reserved for the public value object returned by `Ledger::find()` |
+| `currency` stays a plain 3-letter string on models, not Headroom's `Currency` enum | Headroom's enum only has USD and GBP; old rows must still load if it changes |
 | Query API is the only supported read path; returns final readonly value objects, never Eloquent models | Schema can change without breaking consumers (Filament plugin included) |
 | Tags stored only for allowlisted keys, default empty | Nothing personal is recorded unless the app opts in; user IDs are personal data |
 | Never store prompt or response text | Privacy; enforced by arch tests |
