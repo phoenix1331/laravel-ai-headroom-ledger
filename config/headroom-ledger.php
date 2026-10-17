@@ -56,6 +56,9 @@ return [
     | their key is listed here. The default is empty, so nothing personal is
     | recorded unless the app opts in. User IDs are personal data.
     |
+    | Keys can be up to 64 characters. Values are stored as strings of up to
+    | 191 characters; a longer value is skipped and reported, not truncated.
+    |
     | primary_tag: one allowlisted key (for example "tenant_id") kept in the
     |              daily rollups so per-tenant queries stay fast
     |

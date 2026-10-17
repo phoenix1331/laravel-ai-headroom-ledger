@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Phoenix1331\AiHeadroomLedger\Recording;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Builder;
+use InvalidArgumentException;
 use Phoenix1331\AiHeadroom\Data\Cost;
 use Phoenix1331\AiHeadroom\Enums\CountMethod;
 use Phoenix1331\AiHeadroom\Enums\LimitType;
@@ -16,6 +18,7 @@ use Phoenix1331\AiHeadroom\Events\TokensCounted;
 use Phoenix1331\AiHeadroom\Events\TokensUsed;
 use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
 use Phoenix1331\AiHeadroomLedger\Models\Entry;
+use Phoenix1331\AiHeadroomLedger\Models\Tag;
 use Phoenix1331\AiHeadroomLedger\Support\MicroUnits;
 
 /**
@@ -37,12 +40,23 @@ use Phoenix1331\AiHeadroomLedger\Support\MicroUnits;
  * (for example after failover). With several warnings, the reason is the
  * highest-ranked limit in LimitType::cases() order.
  *
+ * Tags: context tags are stored only for keys in headroom-ledger.tags.allowed,
+ * which is empty by default, so nothing personal is recorded unless the app
+ * opts in.
+ *
  * @internal
  */
 final class EntryRecorder
 {
     /** The largest value percent_used (decimal 7,2) can hold. */
     private const float MAX_PERCENT = 99_999.99;
+
+    /** Lengths of the tag key and value columns. */
+    private const int MAX_TAG_KEY = 64;
+
+    private const int MAX_TAG_VALUE = 191;
+
+    public function __construct(private readonly ExceptionHandler $exceptions) {}
 
     public function counted(TokensCounted $event): void
     {
@@ -54,6 +68,8 @@ final class EntryRecorder
             ),
             insertOnly: ['outcome' => Outcome::Counted],
         );
+
+        $this->tags($event->requestId, $event->context);
     }
 
     public function used(TokensUsed $event): void
@@ -84,6 +100,8 @@ final class EntryRecorder
         $this->entry($event->requestId)
             ->whereIn('outcome', [Outcome::Counted, Outcome::Blocked, Outcome::Failed])
             ->update(['outcome' => Outcome::Completed, 'outcome_reason' => null]);
+
+        $this->tags($event->requestId, $event->context);
     }
 
     /**
@@ -112,6 +130,8 @@ final class EntryRecorder
         $this->entry($count->requestId())
             ->whereNull('used_at')
             ->update(['outcome' => Outcome::Blocked, 'outcome_reason' => $event->limit->value]);
+
+        $this->tags($count->requestId(), $count->context());
     }
 
     /**
@@ -164,6 +184,52 @@ final class EntryRecorder
             ->where('outcome', Outcome::Counted)
             ->whereNull('used_at')
             ->update(['outcome' => Outcome::Failed, 'outcome_reason' => $reason]);
+    }
+
+    /**
+     * Store the allowlisted context tags. Values are stored as strings; one too
+     * long for the column is skipped and reported rather than truncated.
+     *
+     * @param  array<string, scalar>  $context
+     */
+    private function tags(string $requestId, array $context): void
+    {
+        $rows = [];
+
+        foreach (array_intersect_key($context, array_flip($this->allowedTagKeys())) as $key => $value) {
+            $value = is_bool($value) ? ($value ? '1' : '0') : (string) $value;
+
+            if (mb_strlen($value) > self::MAX_TAG_VALUE) {
+                $this->exceptions->report(new InvalidArgumentException(
+                    "Headroom Ledger skipped the \"{$key}\" tag: its value is longer than ".self::MAX_TAG_VALUE.' characters.'
+                ));
+
+                continue;
+            }
+
+            $rows[] = ['request_id' => $requestId, 'key' => $key, 'value' => $value];
+        }
+
+        if ($rows !== []) {
+            Tag::query()->upsert($rows, ['request_id', 'key'], ['value']);
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function allowedTagKeys(): array
+    {
+        $allowed = config('headroom-ledger.tags.allowed', []);
+
+        if (! is_array($allowed)) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            $allowed,
+            fn (mixed $key): bool => is_string($key) && $key !== '' && mb_strlen($key) <= self::MAX_TAG_KEY,
+        ));
     }
 
     /**
