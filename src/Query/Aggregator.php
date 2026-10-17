@@ -11,6 +11,7 @@ use LogicException;
 use Phoenix1331\AiHeadroom\Enums\CountMethod;
 use Phoenix1331\AiHeadroomLedger\Data\AccuracyStat;
 use Phoenix1331\AiHeadroomLedger\Data\AccuracyStats;
+use Phoenix1331\AiHeadroomLedger\Data\ContextUsage;
 use Phoenix1331\AiHeadroomLedger\Data\Money;
 use Phoenix1331\AiHeadroomLedger\Data\Spend;
 use Phoenix1331\AiHeadroomLedger\Data\SpendSummary;
@@ -37,7 +38,13 @@ final class Aggregator
         .'coalesce(sum(actual_cost), 0) as actual_cost, '
         .'sum(case when actual_cost is not null and cost_approximate then 1 else 0 end) as approximate_requests, '
         .'sum(case when actual_cost is null and estimated_cost is not null then 1 else 0 end) as estimate_only_requests, '
-        .'coalesce(sum(case when actual_cost is null then estimated_cost else 0 end), 0) as estimate_only_cost';
+        .'coalesce(sum(case when actual_cost is null then estimated_cost else 0 end), 0) as estimate_only_cost, '
+        ."sum(case when outcome = 'warned' then 1 else 0 end) as warned, "
+        ."sum(case when outcome = 'blocked' then 1 else 0 end) as blocked, "
+        ."sum(case when outcome = 'failed' then 1 else 0 end) as failed, "
+        .'sum(case when percent_used is not null then 1 else 0 end) as context_samples, '
+        .'coalesce(sum(percent_used), 0) as percent_used_sum, '
+        .'coalesce(max(percent_used), 0) as percent_used_max';
 
     /**
      * Accuracy sums. The absolute error avoids abs(a - b), which MySQL rejects
@@ -62,7 +69,13 @@ final class Aggregator
         .'coalesce(sum(actual_cost), 0) as actual_cost, '
         .'coalesce(sum(approximate_requests), 0) as approximate_requests, '
         .'coalesce(sum(estimated_only_requests), 0) as estimate_only_requests, '
-        .'coalesce(sum(estimated_only_cost), 0) as estimate_only_cost';
+        .'coalesce(sum(estimated_only_cost), 0) as estimate_only_cost, '
+        .'coalesce(sum(warned), 0) as warned, '
+        .'coalesce(sum(blocked), 0) as blocked, '
+        .'coalesce(sum(failed), 0) as failed, '
+        .'coalesce(sum(context_samples), 0) as context_samples, '
+        .'coalesce(sum(percent_used_sum), 0) as percent_used_sum, '
+        .'coalesce(max(percent_used_max), 0) as percent_used_max';
 
     /** Accuracy sums from daily rollup rows; the rollup model is the counted model for these rows. */
     private const string ROLLUP_ACCURACY = 'model as model_counted, count_method, '
@@ -77,7 +90,7 @@ final class Aggregator
     /**
      * @param  Builder<Entry>  $rows
      * @param  QueryBuilder|null  $rollups  Filtered daily rollup rows covering the days $rows leaves out.
-     * @return array<string, array{key: string|null, spend: SpendSummary, tokens: TokenTotals}> Keyed by group key ('' for null).
+     * @return array<string, array{key: string|null, spend: SpendSummary, tokens: TokenTotals, context: ContextUsage}> Keyed by group key ('' for null).
      */
     public static function totals(Builder $rows, ?Grouping $grouping = null, ?string $tagKey = null, ?QueryBuilder $rollups = null): array
     {
@@ -122,7 +135,7 @@ final class Aggregator
             /** @var array<string, mixed> $row */
             $row = (array) $row;
             $key = $grouping === null ? null : self::key($row['group_key'] ?? null, $grouping);
-            $groups[$key ?? ''] = self::merge($groups[$key ?? ''] ?? ['key' => $key, 'spend' => new SpendSummary, 'tokens' => new TokenTotals], $row);
+            $groups[$key ?? ''] = self::merge($groups[$key ?? ''] ?? ['key' => $key, 'spend' => new SpendSummary, 'tokens' => new TokenTotals, 'context' => new ContextUsage], $row);
         }
 
         return $groups;
@@ -179,9 +192,9 @@ final class Aggregator
     }
 
     /**
-     * @param  array{key: string|null, spend: SpendSummary, tokens: TokenTotals}  $group
+     * @param  array{key: string|null, spend: SpendSummary, tokens: TokenTotals, context: ContextUsage}  $group
      * @param  array<string, mixed>  $row
-     * @return array{key: string|null, spend: SpendSummary, tokens: TokenTotals}
+     * @return array{key: string|null, spend: SpendSummary, tokens: TokenTotals, context: ContextUsage}
      */
     private static function merge(array $group, array $row): array
     {
@@ -216,6 +229,16 @@ final class Aggregator
                 self::int($row, 'requests'),
                 self::int($row, 'with_usage'),
             )),
+            'context' => $group['context']->plus(new ContextUsage(
+                self::int($row, 'requests'),
+                self::int($row, 'warned'),
+                self::int($row, 'blocked'),
+                self::int($row, 'failed'),
+                self::int($row, 'context_samples'),
+                // Each percentage has two decimals, so the true sum does too; rounding removes float drift.
+                round(self::float($row, 'percent_used_sum'), 2),
+                self::float($row, 'percent_used_max'),
+            )),
         ];
     }
 
@@ -229,6 +252,16 @@ final class Aggregator
 
         // Databases return dates as "Y-m-d" or with a midnight time.
         return $grouping === Grouping::Day && $key !== null ? substr($key, 0, 10) : $key;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private static function float(array $row, string $column): float
+    {
+        $value = $row[$column] ?? 0;
+
+        return is_numeric($value) ? (float) $value : 0.0;
     }
 
     /**

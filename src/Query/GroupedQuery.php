@@ -9,6 +9,7 @@ use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Phoenix1331\AiHeadroomLedger\Data\Breakdown;
+use Phoenix1331\AiHeadroomLedger\Data\ContextUsage;
 use Phoenix1331\AiHeadroomLedger\Data\Group;
 use Phoenix1331\AiHeadroomLedger\Data\SpendSummary;
 use Phoenix1331\AiHeadroomLedger\Data\TokenTotals;
@@ -54,13 +55,23 @@ final readonly class GroupedQuery
     }
 
     /**
-     * @template TValue of SpendSummary|TokenTotals
+     * Context window usage and limit outcomes per group.
      *
-     * @param  'spend'|'tokens'  $part
+     * @return Breakdown<ContextUsage>
+     */
+    public function context(): Breakdown
+    {
+        return $this->breakdown('context', new ContextUsage);
+    }
+
+    /**
+     * @template TValue of SpendSummary|TokenTotals|ContextUsage
+     *
+     * @param  'spend'|'tokens'|'context'  $part
      * @param  TValue  $empty
      * @return Breakdown<TValue>
      */
-    private function breakdown(string $part, SpendSummary|TokenTotals $empty): Breakdown
+    private function breakdown(string $part, SpendSummary|TokenTotals|ContextUsage $empty): Breakdown
     {
         $groups = [];
 

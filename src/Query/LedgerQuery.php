@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use InvalidArgumentException;
 use Phoenix1331\AiHeadroomLedger\Data\AccuracyStats;
+use Phoenix1331\AiHeadroomLedger\Data\ContextUsage;
 use Phoenix1331\AiHeadroomLedger\Data\LedgerEntries;
 use Phoenix1331\AiHeadroomLedger\Data\SpendSummary;
 use Phoenix1331\AiHeadroomLedger\Data\TokenTotals;
@@ -166,6 +167,14 @@ final class LedgerQuery
     public function tokens(): TokenTotals
     {
         return Aggregator::totals(...$this->plan())['']['tokens'] ?? new TokenTotals;
+    }
+
+    /**
+     * Context window usage and limit outcomes for the matching requests.
+     */
+    public function context(): ContextUsage
+    {
+        return Aggregator::totals(...$this->plan())['']['context'] ?? new ContextUsage;
     }
 
     /**

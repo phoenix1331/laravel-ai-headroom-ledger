@@ -13,6 +13,7 @@ use Phoenix1331\AiHeadroom\Events\RequestFailed;
 use Phoenix1331\AiHeadroom\Events\TokensCounted;
 use Phoenix1331\AiHeadroom\Events\TokensUsed;
 use Phoenix1331\AiHeadroomLedger\Console\PruneCommand;
+use Phoenix1331\AiHeadroomLedger\Console\ReportCommand;
 use Phoenix1331\AiHeadroomLedger\Console\RollupCommand;
 use Phoenix1331\AiHeadroomLedger\Listeners\RecordHeadroomLow;
 use Phoenix1331\AiHeadroomLedger\Listeners\RecordRequestBlocked;
@@ -40,7 +41,7 @@ class AiHeadroomLedgerServiceProvider extends ServiceProvider
             __DIR__.'/../database/migrations' => database_path('migrations'),
         ], 'headroom-ledger-migrations');
 
-        $this->commands([RollupCommand::class, PruneCommand::class]);
+        $this->commands([RollupCommand::class, PruneCommand::class, ReportCommand::class]);
 
         if (! $this->app->make('config')->boolean('headroom-ledger.enabled', true)) {
             return;
