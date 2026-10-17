@@ -30,6 +30,7 @@ This is a Composer **package**, not a Laravel app. There is no `app/`, no routes
 | `src/Query/EntryMapper.php` | `@internal`: `Entry` row to `LedgerEntry`; the only place models become public data |
 | `src/Exceptions/CurrencyMismatch.php` | Thrown when amounts in different currencies would be combined |
 | `src/Rollup/DailyRollupBuilder.php` | `@internal`. `build($day)` rebuilds one day's `{prefix}daily` rows from its entries in one transaction (delete then insert, 500-row chunks) and returns the row count |
+| `src/Console/RollupCommand.php` | `headroom-ledger:rollup`: yesterday by default, `--date=Y-m-d`, or `--from` [`--to`, default yesterday] to backfill; strict dates (2026-02-30 rejected); one line per day with row count. Scheduled by the provider via `callAfterResolving(Schedule)` at `rollup.time` when `enabled` and `rollup.enabled`, `withoutOverlapping()->onOneServer()` |
 | `src/Enums/Outcome.php` | `counted`, `completed`, `warned`, `blocked`, `failed` |
 | `src/Support/` | `@internal`: `TableNames` (prefix + connection from config), `MicroUnits` (amount <-> integer millionths, rounded), `TagValue` (scalar tag value as stored and matched: string, bools `1`/`0`) |
 | `src/Support/Casts/` | `DateOnly` (stores `Y-m-d` for `occurred_on` and rollup `date`); privacy guards on `Entry`: `TokenBreakdown` (section names to whole token counts only; read back in a fixed section order), `ReasonCode` (a `LimitType` value or `ExceptionClass[:status]`; messages throw) |
@@ -143,6 +144,8 @@ Community docs: `CONTRIBUTING.md` (setup, checks, ground rules, adding a report 
 | `errorPercent()` is weighted (sum of absolute error / sum of actual); `biasPercent()` is signed, positive = under-estimate | A per-request average would let tiny requests dominate |
 | Absolute error computed with `case when a >= b then a - b else b - a end` | MySQL errors when subtracting unsigned integers would go negative, so `abs(a - b)` is not portable |
 | `LedgerQuery::rows()` is private; `GroupedQuery` receives a closure | A public `@internal` method still let consumers reach an Eloquent builder via `Ledger::query()->rows()`; the arch test fails if it is made public again (mutation-checked) |
+| Scheduled rollups run `onOneServer()` | Each day is rebuilt as delete-then-insert, so concurrent runs on several servers could double a day's rows; needs a lock-capable cache (redis, memcached, database, dynamodb), to be noted in the README |
+| Default rollup is yesterday only; backfill with `--from` | Today is still changing and is read raw; a missed night or an outage is repaired explicitly |
 | Mixed currencies are grouped per currency, never summed | No currency conversion in scope; consumers decide |
 | Aggregates read daily rollups for closed days, raw entries for today | Keeps dashboards fast without losing same-day data |
 | Stay on 0.x until `filament-headroom` is built against the ledger | The dashboard is what proves the schema and query API before they become 1.0 public API |
