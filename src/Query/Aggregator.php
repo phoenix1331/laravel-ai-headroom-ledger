@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Phoenix1331\AiHeadroomLedger\Query;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\Query\JoinClause;
+use LogicException;
 use Phoenix1331\AiHeadroom\Enums\CountMethod;
 use Phoenix1331\AiHeadroomLedger\Data\AccuracyStat;
 use Phoenix1331\AiHeadroomLedger\Data\AccuracyStats;
@@ -48,14 +50,36 @@ final class Aggregator
         .'then actual_input_tokens - estimated_input_tokens '
         .'else estimated_input_tokens - actual_input_tokens end) as absolute_error';
 
+    /** The same totals, summed from daily rollup rows. */
+    private const string ROLLUP_TOTALS = 'coalesce(sum(requests), 0) as requests, '
+        .'coalesce(sum(requests_with_usage), 0) as with_usage, '
+        .'coalesce(sum(estimated_input_tokens), 0) as estimated_input, '
+        .'coalesce(sum(actual_input_tokens), 0) as input, '
+        .'coalesce(sum(output_tokens), 0) as output, '
+        .'coalesce(sum(cache_read_tokens), 0) as cache_read, '
+        .'coalesce(sum(cache_write_tokens), 0) as cache_write, '
+        .'coalesce(sum(priced_requests), 0) as priced_requests, '
+        .'coalesce(sum(actual_cost), 0) as actual_cost, '
+        .'coalesce(sum(approximate_requests), 0) as approximate_requests, '
+        .'coalesce(sum(estimated_only_requests), 0) as estimate_only_requests, '
+        .'coalesce(sum(estimated_only_cost), 0) as estimate_only_cost';
+
+    /** Accuracy sums from daily rollup rows; the rollup model is the counted model for these rows. */
+    private const string ROLLUP_ACCURACY = 'model as model_counted, count_method, '
+        .'sum(accuracy_samples) as samples, '
+        .'sum(accuracy_estimated_tokens) as estimated_tokens, '
+        .'sum(accuracy_actual_tokens) as actual_tokens, '
+        .'sum(accuracy_absolute_error) as absolute_error';
+
     /** Joined tag table alias for byTag(). */
     private const string TAG = 'ledger_group_tag';
 
     /**
      * @param  Builder<Entry>  $rows
+     * @param  QueryBuilder|null  $rollups  Filtered daily rollup rows covering the days $rows leaves out.
      * @return array<string, array{key: string|null, spend: SpendSummary, tokens: TokenTotals}> Keyed by group key ('' for null).
      */
-    public static function totals(Builder $rows, ?Grouping $grouping = null, ?string $tagKey = null): array
+    public static function totals(Builder $rows, ?Grouping $grouping = null, ?string $tagKey = null, ?QueryBuilder $rollups = null): array
     {
         $query = $rows->toBase()->selectRaw(self::TOTALS)->addSelect('currency')->groupBy('currency');
 
@@ -74,9 +98,27 @@ final class Aggregator
                 ->groupBy(self::TAG.'.value'),
         };
 
+        $results = $query->get()->all();
+
+        if ($rollups !== null) {
+            $rollups->selectRaw(self::ROLLUP_TOTALS)->addSelect('currency')->groupBy('currency');
+
+            match ($grouping) {
+                null => null,
+                Grouping::Model => $rollups->addSelect('model as group_key')->groupBy('model'),
+                Grouping::Provider => $rollups->addSelect('provider as group_key')->groupBy('provider'),
+                Grouping::Agent => $rollups->addSelect('agent as group_key')->groupBy('agent'),
+                Grouping::Day => $rollups->addSelect('date as group_key')->groupBy('date'),
+                Grouping::Tag => $rollups->addSelect('primary_tag_value as group_key')->groupBy('primary_tag_value'),
+                Grouping::Run => throw new LogicException('Runs cannot be read from daily rollups.'),
+            };
+
+            array_push($results, ...$rollups->get()->all());
+        }
+
         $groups = [];
 
-        foreach ($query->get() as $row) {
+        foreach ($results as $row) {
             /** @var array<string, mixed> $row */
             $row = (array) $row;
             $key = $grouping === null ? null : self::key($row['group_key'] ?? null, $grouping);
@@ -91,8 +133,9 @@ final class Aggregator
      * for requests that reported usage from the model that was counted.
      *
      * @param  Builder<Entry>  $rows
+     * @param  QueryBuilder|null  $rollups  Filtered daily rollup rows covering the days $rows leaves out.
      */
-    public static function accuracy(Builder $rows): AccuracyStats
+    public static function accuracy(Builder $rows, ?QueryBuilder $rollups = null): AccuracyStats
     {
         $results = $rows->toBase()
             ->selectRaw(self::ACCURACY)
@@ -101,7 +144,17 @@ final class Aggregator
             ->whereNotNull('model_counted')
             ->whereColumn('model_used', 'model_counted')
             ->groupBy('model_counted', 'count_method')
-            ->get();
+            ->get()
+            ->all();
+
+        if ($rollups !== null) {
+            array_push($results, ...$rollups
+                ->selectRaw(self::ROLLUP_ACCURACY)
+                ->where('accuracy_samples', '>', 0)
+                ->groupBy('model', 'count_method')
+                ->get()
+                ->all());
+        }
 
         $stats = [];
 
@@ -110,7 +163,7 @@ final class Aggregator
             $row = (array) $row;
             $method = $row['count_method'] ?? null;
 
-            $stats[] = new AccuracyStat(
+            $stat = new AccuracyStat(
                 is_scalar($row['model_counted'] ?? null) ? (string) $row['model_counted'] : null,
                 is_string($method) ? CountMethod::tryFrom($method) : null,
                 self::int($row, 'samples'),
@@ -118,9 +171,11 @@ final class Aggregator
                 self::int($row, 'actual_tokens'),
                 self::int($row, 'absolute_error'),
             );
+            $key = $stat->model.'|'.$stat->countMethod?->value;
+            $stats[$key] = isset($stats[$key]) ? $stats[$key]->plus($stat) : $stat;
         }
 
-        return new AccuracyStats($stats);
+        return new AccuracyStats(array_values($stats));
     }
 
     /**

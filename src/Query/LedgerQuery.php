@@ -14,6 +14,7 @@ use Phoenix1331\AiHeadroomLedger\Data\LedgerEntries;
 use Phoenix1331\AiHeadroomLedger\Data\SpendSummary;
 use Phoenix1331\AiHeadroomLedger\Data\TokenTotals;
 use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
+use Phoenix1331\AiHeadroomLedger\Models\DailyRollup;
 use Phoenix1331\AiHeadroomLedger\Models\Entry;
 use Phoenix1331\AiHeadroomLedger\Support\TableNames;
 use Phoenix1331\AiHeadroomLedger\Support\TagValue;
@@ -155,7 +156,7 @@ final class LedgerQuery
      */
     public function spend(): SpendSummary
     {
-        return Aggregator::totals($this->rows())['']['spend'] ?? new SpendSummary;
+        return Aggregator::totals(...$this->plan())['']['spend'] ?? new SpendSummary;
     }
 
     /**
@@ -164,7 +165,7 @@ final class LedgerQuery
      */
     public function tokens(): TokenTotals
     {
-        return Aggregator::totals($this->rows())['']['tokens'] ?? new TokenTotals;
+        return Aggregator::totals(...$this->plan())['']['tokens'] ?? new TokenTotals;
     }
 
     /**
@@ -174,7 +175,9 @@ final class LedgerQuery
      */
     public function accuracy(): AccuracyStats
     {
-        return Aggregator::accuracy($this->rows());
+        [$rows, , , $rollups] = $this->plan();
+
+        return Aggregator::accuracy($rows, $rollups);
     }
 
     /**
@@ -226,7 +229,69 @@ final class LedgerQuery
     {
         $range = $this->from === null || $this->to === null ? null : [$this->from, $this->to];
 
-        return new GroupedQuery(fn (): Builder => $this->rows(), $range, $grouping, $tagKey);
+        return new GroupedQuery(fn (): array => $this->plan($grouping, $tagKey), $range);
+    }
+
+    /**
+     * Where an aggregate reads from: daily rollups for closed days they cover,
+     * raw entries for every other day (today, days not yet rolled up, or days
+     * rolled up with a different primary tag). Raw only when rollups are off
+     * or cannot answer the filters or grouping.
+     *
+     * @return array{0: Builder<Entry>, 1: Grouping|null, 2: string|null, 3: QueryBuilder|null}
+     */
+    private function plan(?Grouping $grouping = null, ?string $tagKey = null): array
+    {
+        $primaryTag = TableNames::primaryTag();
+        $usesTag = $this->tags !== [] || $grouping === Grouping::Tag;
+
+        $answerable = config()->boolean('headroom-ledger.rollup.enabled', true)
+            && $this->minPercent === null
+            && $this->outcomes === []
+            && $grouping !== Grouping::Run
+            && ($this->tags === [] || (count($this->tags) === 1 && array_key_first($this->tags) === $primaryTag))
+            && ($grouping !== Grouping::Tag || $tagKey === $primaryTag);
+
+        if (! $answerable) {
+            return [$this->rows(), $grouping, $tagKey, null];
+        }
+
+        $tagKeyOfDay = $usesTag ? $primaryTag : null;
+
+        $rows = $this->rows()->whereNotExists(fn (QueryBuilder $days) => self::coveredDays($days, TableNames::entries().'.occurred_on', $tagKeyOfDay));
+        $rollups = $this->rollupRows()->whereExists(fn (QueryBuilder $days) => self::coveredDays($days, TableNames::daily().'.date', $tagKeyOfDay));
+
+        return [$rows, $grouping, $tagKey, $rollups];
+    }
+
+    /**
+     * Closed days the rollups cover, built with the primary tag the query needs (if any).
+     */
+    private static function coveredDays(QueryBuilder $days, string $dateColumn, ?string $tagKey): void
+    {
+        $table = TableNames::rollupDays();
+
+        $days->from($table)
+            ->whereColumn($table.'.date', $dateColumn)
+            ->where($table.'.date', '<', CarbonImmutable::today()->toDateString())
+            ->when($tagKey !== null, fn (QueryBuilder $query) => $query->where($table.'.primary_tag_key', $tagKey));
+    }
+
+    /**
+     * Daily rollup rows matching the filters rollups can answer.
+     */
+    private function rollupRows(): QueryBuilder
+    {
+        return DailyRollup::query()->toBase()
+            ->when($this->from !== null, fn (QueryBuilder $query) => $query->whereBetween('date', [$this->from, $this->to]))
+            ->when($this->agent !== null, fn (QueryBuilder $query) => $query->where('agent', $this->agent))
+            ->when($this->provider !== null, fn (QueryBuilder $query) => $query->where('provider', $this->provider))
+            ->when($this->model !== null, fn (QueryBuilder $query) => $query->where('model', $this->model))
+            ->tap(function (QueryBuilder $query): void {
+                foreach ($this->tags as $key => $value) {
+                    $query->where('primary_tag_key', $key)->where('primary_tag_value', $value);
+                }
+            });
     }
 
     /**

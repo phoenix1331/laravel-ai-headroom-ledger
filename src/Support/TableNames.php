@@ -28,6 +28,22 @@ final class TableNames
         return self::prefix().'daily';
     }
 
+    public static function rollupDays(): string
+    {
+        return self::prefix().'rollup_days';
+    }
+
+    /**
+     * The configured primary tag, if it is also allowlisted (otherwise no entry carries it).
+     */
+    public static function primaryTag(): ?string
+    {
+        $key = config('headroom-ledger.tags.primary_tag');
+        $allowed = config('headroom-ledger.tags.allowed', []);
+
+        return is_string($key) && $key !== '' && is_array($allowed) && in_array($key, $allowed, true) ? $key : null;
+    }
+
     public static function connection(): ?string
     {
         $connection = config('headroom-ledger.connection');

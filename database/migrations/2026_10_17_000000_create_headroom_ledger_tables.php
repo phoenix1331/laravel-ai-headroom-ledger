@@ -129,6 +129,15 @@ return new class extends Migration
             $table->index('date', $prefix.'daily_date_idx');
             $table->index(['primary_tag_key', 'primary_tag_value', 'date'], $prefix.'daily_tag_idx');
         });
+
+        // One row per rolled-up day: which days rollups cover (including days with no
+        // entries), the primary tag they were built with, and a row to lock while rebuilding.
+        Schema::create($prefix.'rollup_days', function (Blueprint $table): void {
+            $table->date('date')->primary();
+            $table->string('primary_tag_key', 64)->nullable();
+            $table->unsignedInteger('rows')->default(0);
+            $table->timestamp('built_at')->nullable();
+        });
     }
 
     public function down(): void
@@ -136,6 +145,7 @@ return new class extends Migration
         $prefix = $this->prefix();
 
         Schema::dropIfExists($prefix.'tags');
+        Schema::dropIfExists($prefix.'rollup_days');
         Schema::dropIfExists($prefix.'daily');
         Schema::dropIfExists($prefix.'entries');
     }

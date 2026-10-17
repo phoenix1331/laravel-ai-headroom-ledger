@@ -7,6 +7,7 @@ namespace Phoenix1331\AiHeadroomLedger\Query;
 use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Phoenix1331\AiHeadroomLedger\Data\Breakdown;
 use Phoenix1331\AiHeadroomLedger\Data\Group;
 use Phoenix1331\AiHeadroomLedger\Data\SpendSummary;
@@ -24,14 +25,12 @@ final readonly class GroupedQuery
     /**
      * @internal Built by LedgerQuery's by*() methods.
      *
-     * @param  Closure(): Builder<Entry>  $rows
+     * @param  Closure(): array{0: Builder<Entry>, 1: Grouping|null, 2: string|null, 3: QueryBuilder|null}  $plan  Where to read each day from.
      * @param  array{0: string, 1: string}|null  $range  Inclusive "Y-m-d" days of the date filter.
      */
     public function __construct(
-        private Closure $rows,
+        private Closure $plan,
         private ?array $range,
-        private Grouping $grouping,
-        private ?string $tagKey = null,
     ) {}
 
     /**
@@ -65,13 +64,15 @@ final readonly class GroupedQuery
     {
         $groups = [];
 
-        foreach (Aggregator::totals(($this->rows)(), $this->grouping, $this->tagKey) as $totals) {
+        $plan = ($this->plan)();
+
+        foreach (Aggregator::totals(...$plan) as $totals) {
             /** @var TValue $value */
             $value = $totals[$part];
             $groups[$totals['key'] ?? ''] = new Group($totals['key'], $value);
         }
 
-        foreach ($this->emptyDays() as $day) {
+        foreach ($this->emptyDays($plan[1]) as $day) {
             $groups[$day] ??= new Group($day, $empty);
         }
 
@@ -81,9 +82,9 @@ final readonly class GroupedQuery
     /**
      * @return list<string>
      */
-    private function emptyDays(): array
+    private function emptyDays(?Grouping $grouping): array
     {
-        if ($this->grouping !== Grouping::Day || $this->range === null) {
+        if ($grouping !== Grouping::Day || $this->range === null) {
             return [];
         }
 

@@ -8,12 +8,15 @@ use DateTimeInterface;
 use Illuminate\Database\Query\JoinClause;
 use Phoenix1331\AiHeadroomLedger\Models\DailyRollup;
 use Phoenix1331\AiHeadroomLedger\Models\Entry;
+use Phoenix1331\AiHeadroomLedger\Models\RollupDay;
 use Phoenix1331\AiHeadroomLedger\Support\TableNames;
 
 /**
  * Builds the daily rollup for one day from its raw entries. Rebuilding a day
  * replaces its rollup rows in one transaction, so re-running is safe and
- * always reflects the entries as they are now.
+ * always reflects the entries as they are now. The day's rollup_days row is
+ * locked for the rebuild, so concurrent runs wait for each other instead of
+ * both inserting, and records that the day is covered.
  *
  * Grain: day, agent, provider and model (the ones that answered, else the
  * ones counted), count method, currency, and the configured primary tag.
@@ -72,7 +75,7 @@ final class DailyRollupBuilder
     public function build(DateTimeInterface|string $day): int
     {
         $date = is_string($day) ? substr($day, 0, 10) : $day->format('Y-m-d');
-        $primaryTag = $this->primaryTag();
+        $primaryTag = TableNames::primaryTag();
 
         $query = Entry::query()->toBase()
             ->where('occurred_on', $date)
@@ -93,6 +96,10 @@ final class DailyRollupBuilder
         }
 
         return (new DailyRollup)->getConnection()->transaction(function () use ($query, $date, $primaryTag): int {
+            // Lock the day so a concurrent rebuild waits rather than interleaving its delete and insert.
+            RollupDay::query()->insertOrIgnore(['date' => $date]);
+            RollupDay::query()->whereKey($date)->lockForUpdate()->first();
+
             $rows = [];
 
             foreach ($query->get() as $group) {
@@ -113,18 +120,13 @@ final class DailyRollupBuilder
                 DailyRollup::query()->insert($chunk);
             }
 
+            RollupDay::query()->whereKey($date)->update([
+                'primary_tag_key' => $primaryTag,
+                'rows' => count($rows),
+                'built_at' => now(),
+            ]);
+
             return count($rows);
         });
-    }
-
-    /**
-     * The configured primary tag, if it is allowlisted (otherwise no entry carries it).
-     */
-    private function primaryTag(): ?string
-    {
-        $key = config('headroom-ledger.tags.primary_tag');
-        $allowed = config('headroom-ledger.tags.allowed', []);
-
-        return is_string($key) && $key !== '' && is_array($allowed) && in_array($key, $allowed, true) ? $key : null;
     }
 }

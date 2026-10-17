@@ -30,6 +30,7 @@ const LEDGER_COLUMNS = [
         'context_samples', 'percent_used_sum', 'percent_used_max',
         'accuracy_samples', 'accuracy_estimated_tokens', 'accuracy_actual_tokens', 'accuracy_absolute_error',
     ],
+    'headroom_ledger_rollup_days' => ['date', 'primary_tag_key', 'rows', 'built_at'],
 ];
 
 /** The only JSON column; its cast accepts token counts only. */
