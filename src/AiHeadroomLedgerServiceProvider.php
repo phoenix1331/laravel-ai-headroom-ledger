@@ -22,6 +22,8 @@ class AiHeadroomLedgerServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/headroom-ledger.php', 'headroom-ledger');
+
+        $this->app->singleton(LedgerManager::class);
     }
 
     public function boot(): void

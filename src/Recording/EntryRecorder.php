@@ -20,6 +20,7 @@ use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
 use Phoenix1331\AiHeadroomLedger\Models\Entry;
 use Phoenix1331\AiHeadroomLedger\Models\Tag;
 use Phoenix1331\AiHeadroomLedger\Support\MicroUnits;
+use Phoenix1331\AiHeadroomLedger\Support\TagValue;
 
 /**
  * Writes Headroom events to the ledger, one row per request ID.
@@ -197,7 +198,7 @@ final class EntryRecorder
         $rows = [];
 
         foreach (array_intersect_key($context, array_flip($this->allowedTagKeys())) as $key => $value) {
-            $value = is_bool($value) ? ($value ? '1' : '0') : (string) $value;
+            $value = TagValue::from($value);
 
             if (mb_strlen($value) > self::MAX_TAG_VALUE) {
                 $this->exceptions->report(new InvalidArgumentException(

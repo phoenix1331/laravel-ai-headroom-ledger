@@ -48,7 +48,10 @@
         "laravel": {
             "providers": [
                 "Phoenix1331\\AiHeadroomLedger\\AiHeadroomLedgerServiceProvider"
-            ]
+            ],
+            "aliases": {
+                "Ledger": "Phoenix1331\\AiHeadroomLedger\\Facades\\Ledger"
+            }
         }
     },
     "scripts": {

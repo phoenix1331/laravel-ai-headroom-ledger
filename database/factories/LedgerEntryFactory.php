@@ -14,6 +14,7 @@ use Phoenix1331\AiHeadroom\Enums\CountMethod;
 use Phoenix1331\AiHeadroom\Enums\LimitType;
 use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
 use Phoenix1331\AiHeadroomLedger\Models\Entry;
+use Phoenix1331\AiHeadroomLedger\Support\TagValue;
 
 /**
  * Realistic ledger entries for tests, demos and dashboards. Needs no Faker,
@@ -242,7 +243,7 @@ class LedgerEntryFactory extends Factory
             foreach ($tags as $key => $value) {
                 $entry->tags()->create([
                     'key' => $key,
-                    'value' => is_bool($value) ? ($value ? '1' : '0') : (string) $value,
+                    'value' => TagValue::from($value),
                 ]);
             }
         });
