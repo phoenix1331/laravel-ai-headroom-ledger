@@ -6,8 +6,14 @@ namespace Phoenix1331\AiHeadroomLedger;
 
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\ServiceProvider;
+use Phoenix1331\AiHeadroom\Events\HeadroomLow;
+use Phoenix1331\AiHeadroom\Events\RequestBlocked;
+use Phoenix1331\AiHeadroom\Events\RequestFailed;
 use Phoenix1331\AiHeadroom\Events\TokensCounted;
 use Phoenix1331\AiHeadroom\Events\TokensUsed;
+use Phoenix1331\AiHeadroomLedger\Listeners\RecordHeadroomLow;
+use Phoenix1331\AiHeadroomLedger\Listeners\RecordRequestBlocked;
+use Phoenix1331\AiHeadroomLedger\Listeners\RecordRequestFailed;
 use Phoenix1331\AiHeadroomLedger\Listeners\RecordTokensCounted;
 use Phoenix1331\AiHeadroomLedger\Listeners\RecordTokensUsed;
 
@@ -37,5 +43,8 @@ class AiHeadroomLedgerServiceProvider extends ServiceProvider
     {
         $events->listen(TokensCounted::class, RecordTokensCounted::class);
         $events->listen(TokensUsed::class, RecordTokensUsed::class);
+        $events->listen(RequestBlocked::class, RecordRequestBlocked::class);
+        $events->listen(HeadroomLow::class, RecordHeadroomLow::class);
+        $events->listen(RequestFailed::class, RecordRequestFailed::class);
     }
 }

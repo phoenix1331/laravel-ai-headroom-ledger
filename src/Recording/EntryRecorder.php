@@ -4,6 +4,14 @@ declare(strict_types=1);
 
 namespace Phoenix1331\AiHeadroomLedger\Recording;
 
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
+use Phoenix1331\AiHeadroom\Data\Cost;
+use Phoenix1331\AiHeadroom\Enums\CountMethod;
+use Phoenix1331\AiHeadroom\Enums\LimitType;
+use Phoenix1331\AiHeadroom\Events\HeadroomLow;
+use Phoenix1331\AiHeadroom\Events\RequestBlocked;
+use Phoenix1331\AiHeadroom\Events\RequestFailed;
 use Phoenix1331\AiHeadroom\Events\TokensCounted;
 use Phoenix1331\AiHeadroom\Events\TokensUsed;
 use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
@@ -11,10 +19,23 @@ use Phoenix1331\AiHeadroomLedger\Models\Entry;
 use Phoenix1331\AiHeadroomLedger\Support\MicroUnits;
 
 /**
- * Writes Headroom events to the ledger. Every write is a single upsert keyed
- * by request ID that touches only the columns the event owns, so the final
- * row is the same whatever order queued listeners run in. A null from an
- * event means "unknown" and never overwrites a value already recorded.
+ * Writes Headroom events to the ledger, one row per request ID.
+ *
+ * Figures: each event upserts only the columns it owns, and a null from an
+ * event means "unknown" and never overwrites a recorded value.
+ *
+ * Outcome: set on insert, then changed only by conditional updates, so the
+ * row settles the same whatever order queued listeners run in:
+ *
+ *   usage reported         warned if a warning was seen, else completed
+ *   blocked, no usage      blocked
+ *   warned, no usage       warned (a warning outranks a failed attempt)
+ *   failed, no usage       failed
+ *   otherwise              counted
+ *
+ * Usage proves the call was answered, so it overrides blocked and failed
+ * (for example after failover). With several warnings, the reason is the
+ * highest-ranked limit in LimitType::cases() order.
  *
  * @internal
  */
@@ -23,36 +44,18 @@ final class EntryRecorder
     /** The largest value percent_used (decimal 7,2) can hold. */
     private const float MAX_PERCENT = 99_999.99;
 
-    /**
-     * Pre-flight figures. Never changes the outcome, so a count that arrives
-     * after usage, a warning or a block cannot downgrade the row.
-     */
     public function counted(TokensCounted $event): void
     {
-        $this->upsert([
-            'request_id' => $event->requestId,
-            'invocation_id' => $event->invocationId,
-            'agent' => $event->agent,
-            'provider_counted' => $event->provider,
-            'model_counted' => $event->model,
-            'count_method' => $event->countMethod,
-            'estimated_input_tokens' => $event->estimatedInputTokens,
-            'breakdown' => $event->breakdown,
-            'context_window' => $event->contextWindow,
-            'percent_used' => min($event->percentUsed, self::MAX_PERCENT),
-            'currency' => $event->estimatedCost->currency->value,
-            'estimated_cost' => MicroUnits::fromAmount($event->estimatedCost->total()),
-            'occurred_on' => $event->occurredAt->toDateString(),
-            'counted_at' => $event->occurredAt,
-        ], insertOnly: ['outcome' => Outcome::Counted]);
+        $this->upsert(
+            $this->countColumns(
+                $event->requestId, $event->invocationId, $event->agent, $event->provider, $event->model,
+                $event->countMethod, $event->estimatedInputTokens, $event->breakdown, $event->contextWindow,
+                $event->percentUsed, $event->estimatedCost, $event->occurredAt,
+            ),
+            insertOnly: ['outcome' => Outcome::Counted],
+        );
     }
 
-    /**
-     * What the provider actually used and what it cost. Marks the request
-     * completed unless it was warned, which already implies it was answered.
-     * A blocked or failed row becomes completed: usage proves the call went
-     * through, for example after failover.
-     */
     public function used(TokensUsed $event): void
     {
         $this->upsert([
@@ -78,13 +81,127 @@ final class EntryRecorder
             'outcome' => Outcome::Completed,
         ]);
 
-        // A separate conditional update rather than an expression in the upsert, so no raw SQL
-        // is needed: warned stays warned, any other outcome becomes completed.
-        Entry::query()
-            ->whereKey($event->requestId)
-            ->whereNot('outcome', Outcome::Warned)
-            ->whereNot('outcome', Outcome::Completed)
-            ->update(['outcome' => Outcome::Completed]);
+        $this->entry($event->requestId)
+            ->whereIn('outcome', [Outcome::Counted, Outcome::Blocked, Outcome::Failed])
+            ->update(['outcome' => Outcome::Completed, 'outcome_reason' => null]);
+    }
+
+    /**
+     * Blocked before sending. Carries the full count, used only if no
+     * TokensCounted has been recorded yet.
+     */
+    public function blocked(RequestBlocked $event): void
+    {
+        $count = $event->count;
+        $invocationId = $event->invocationId ?? $count->invocationId();
+
+        // TokensCounted owns the count columns; the block's copy only fills a row it creates.
+        $this->upsert(
+            ['request_id' => $count->requestId(), 'invocation_id' => $invocationId],
+            insertOnly: [
+                ...$this->countColumns(
+                    $count->requestId(), $invocationId, $count->agent(), $count->provider(),
+                    $count->model(), $count->method(), $count->total(), $count->breakdown(), $count->contextWindow(),
+                    $count->percentUsed(), $count->estimatedCost(), $event->occurredAt,
+                ),
+                'outcome' => Outcome::Blocked,
+                'outcome_reason' => $event->limit,
+            ],
+        );
+
+        $this->entry($count->requestId())
+            ->whereNull('used_at')
+            ->update(['outcome' => Outcome::Blocked, 'outcome_reason' => $event->limit->value]);
+    }
+
+    /**
+     * Allowed through in report mode despite a breached limit.
+     */
+    public function warned(HeadroomLow $event): void
+    {
+        $this->upsert(
+            ['request_id' => $event->requestId, 'invocation_id' => $event->invocationId],
+            insertOnly: [
+                'occurred_on' => $event->occurredAt->toDateString(),
+                'outcome' => Outcome::Warned,
+                'outcome_reason' => $event->limit,
+            ],
+        );
+
+        $outranked = array_map(
+            fn (LimitType $limit): string => $limit->value,
+            array_slice(LimitType::cases(), array_search($event->limit, LimitType::cases(), true) + 1),
+        );
+
+        $this->entry($event->requestId)
+            ->where(fn (Builder $query) => $query
+                ->whereIn('outcome', [Outcome::Counted, Outcome::Completed, Outcome::Failed])
+                ->orWhere(fn (Builder $query) => $query
+                    ->where('outcome', Outcome::Warned)
+                    ->whereIn('outcome_reason', $outranked)))
+            ->update(['outcome' => Outcome::Warned, 'outcome_reason' => $event->limit->value]);
+    }
+
+    /**
+     * The provider call threw. Recorded as the exception class and HTTP status only.
+     */
+    public function failed(RequestFailed $event): void
+    {
+        $reason = $event->httpStatus === null ? $event->exception : $event->exception.':'.$event->httpStatus;
+
+        $this->upsert(
+            ['request_id' => $event->requestId, 'invocation_id' => $event->invocationId],
+            insertOnly: [
+                'provider_counted' => $event->provider,
+                'model_counted' => $event->model,
+                'occurred_on' => $event->occurredAt->toDateString(),
+                'outcome' => Outcome::Failed,
+                'outcome_reason' => $reason,
+            ],
+        );
+
+        $this->entry($event->requestId)
+            ->where('outcome', Outcome::Counted)
+            ->whereNull('used_at')
+            ->update(['outcome' => Outcome::Failed, 'outcome_reason' => $reason]);
+    }
+
+    /**
+     * Pre-flight figures, shared by TokensCounted and RequestBlocked.
+     *
+     * @param  array<string, int>  $breakdown
+     * @return array<string, mixed>
+     */
+    private function countColumns(
+        string $requestId,
+        ?string $invocationId,
+        ?string $agent,
+        ?string $provider,
+        string $model,
+        CountMethod $method,
+        int $estimatedInputTokens,
+        array $breakdown,
+        int $contextWindow,
+        float $percentUsed,
+        Cost $estimatedCost,
+        CarbonImmutable $occurredAt,
+    ): array {
+        return [
+            'request_id' => $requestId,
+            'invocation_id' => $invocationId,
+            'agent' => $agent,
+            'provider_counted' => $provider,
+            'model_counted' => $model,
+            'count_method' => $method,
+            'estimated_input_tokens' => $estimatedInputTokens,
+            'breakdown' => $breakdown,
+            'context_window' => $contextWindow,
+            'percent_used' => min($percentUsed, self::MAX_PERCENT),
+            'currency' => $estimatedCost->currency->value,
+            'estimated_cost' => MicroUnits::fromAmount($estimatedCost->total()),
+            'occurred_on' => $occurredAt->toDateString(),
+            'counted_at' => $occurredAt,
+        ];
     }
 
     /**
@@ -103,6 +220,21 @@ final class EntryRecorder
             fn (mixed $value): bool => $value !== null,
         ));
 
+        // Laravel turns an upsert with nothing to update into a plain insert, which fails on an existing row.
+        if ($owned === []) {
+            Entry::query()->insertOrIgnore([$values]);
+
+            return;
+        }
+
         Entry::query()->upsert([$values], ['request_id'], $owned);
+    }
+
+    /**
+     * @return Builder<Entry>
+     */
+    private function entry(string $requestId): Builder
+    {
+        return Entry::query()->whereKey($requestId);
     }
 }

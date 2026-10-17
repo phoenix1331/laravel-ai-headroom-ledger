@@ -7,6 +7,10 @@ use Phoenix1331\AiHeadroom\Data\Cost;
 use Phoenix1331\AiHeadroom\Data\TokenCount;
 use Phoenix1331\AiHeadroom\Enums\CountMethod;
 use Phoenix1331\AiHeadroom\Enums\Currency;
+use Phoenix1331\AiHeadroom\Enums\LimitType;
+use Phoenix1331\AiHeadroom\Events\HeadroomLow;
+use Phoenix1331\AiHeadroom\Events\RequestBlocked;
+use Phoenix1331\AiHeadroom\Events\RequestFailed;
 use Phoenix1331\AiHeadroom\Events\TokensCounted;
 use Phoenix1331\AiHeadroom\Events\TokensUsed;
 use Phoenix1331\AiHeadroomLedger\Tests\TestCase;
@@ -90,4 +94,69 @@ function tokensUsed(array $overrides = []): TokensUsed
         $o['inputTokens'], $o['outputTokens'], $o['cacheReadTokens'], $o['cacheWriteTokens'], $o['cost'],
         $o['streamed'], $o['countMethod'], $o['estimatedInputTokens'], $o['context'], CarbonImmutable::parse($o['at']),
     );
+}
+
+function requestBlocked(array $overrides = []): RequestBlocked
+{
+    $count = tokenCount($overrides);
+    $limit = $overrides['limit'] ?? LimitType::ContextWindow;
+
+    return new RequestBlocked(
+        $count->requestId(), $overrides['eventInvocationId'] ?? $count->invocationId(), $limit, 200_000, 210_000, $count,
+        CarbonImmutable::parse($overrides['at'] ?? '2026-10-17 09:30:00'),
+    );
+}
+
+function headroomLow(array $overrides = []): HeadroomLow
+{
+    return new HeadroomLow(
+        $overrides['requestId'] ?? '01JREQUEST000000000000000A',
+        array_key_exists('invocationId', $overrides) ? $overrides['invocationId'] : '0199f3a2-0000-7000-8000-000000000001',
+        $overrides['limit'] ?? LimitType::PercentOfContext,
+        80.0,
+        85.2,
+        '85.2% of context used, limit 80%',
+        CarbonImmutable::parse($overrides['at'] ?? '2026-10-17 09:30:00'),
+    );
+}
+
+function requestFailed(array $overrides = []): RequestFailed
+{
+    return new RequestFailed(
+        $overrides['requestId'] ?? '01JREQUEST000000000000000A',
+        array_key_exists('invocationId', $overrides) ? $overrides['invocationId'] : '0199f3a2-0000-7000-8000-000000000001',
+        $overrides['provider'] ?? 'anthropic',
+        $overrides['model'] ?? 'claude-sonnet-5-5',
+        $overrides['exception'] ?? 'Illuminate\\Http\\Client\\RequestException',
+        array_key_exists('httpStatus', $overrides) ? $overrides['httpStatus'] : 529,
+        CarbonImmutable::parse($overrides['at'] ?? '2026-10-17 09:30:01'),
+    );
+}
+
+/**
+ * Every ordering of the given items.
+ *
+ * @template T
+ *
+ * @param  list<T>  $items
+ * @return list<list<T>>
+ */
+function permutations(array $items): array
+{
+    if (count($items) <= 1) {
+        return [$items];
+    }
+
+    $orders = [];
+
+    foreach ($items as $i => $item) {
+        $rest = $items;
+        unset($rest[$i]);
+
+        foreach (permutations(array_values($rest)) as $order) {
+            $orders[] = [$item, ...$order];
+        }
+    }
+
+    return $orders;
 }
