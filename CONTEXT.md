@@ -29,6 +29,7 @@ This is a Composer **package**, not a Laravel app. There is no `app/`, no routes
 | `src/Query/GroupedQuery.php`, `Aggregator.php`, `Grouping.php` | `GroupedQuery` (public): `spend()`/`tokens()` as a `Breakdown`. `Aggregator` (`@internal`): one portable `GROUP BY` query per call, per group and currency |
 | `src/Query/EntryMapper.php` | `@internal`: `Entry` row to `LedgerEntry`; the only place models become public data |
 | `src/Exceptions/CurrencyMismatch.php` | Thrown when amounts in different currencies would be combined |
+| `src/Rollup/DailyRollupBuilder.php` | `@internal`. `build($day)` rebuilds one day's `{prefix}daily` rows from its entries in one transaction (delete then insert, 500-row chunks) and returns the row count |
 | `src/Enums/Outcome.php` | `counted`, `completed`, `warned`, `blocked`, `failed` |
 | `src/Support/` | `@internal`: `TableNames` (prefix + connection from config), `MicroUnits` (amount <-> integer millionths, rounded), `TagValue` (scalar tag value as stored and matched: string, bools `1`/`0`) |
 | `src/Support/Casts/` | `DateOnly` (stores `Y-m-d` for `occurred_on` and rollup `date`); privacy guards on `Entry`: `TokenBreakdown` (section names to whole token counts only; read back in a fixed section order), `ReasonCode` (a `LimitType` value or `ExceptionClass[:status]`; messages throw) |
@@ -90,6 +91,10 @@ Community docs: `CONTRIBUTING.md` (setup, checks, ground rules, adding a report 
 | Cache tokens stored as `cache_read_tokens` and `cache_write_tokens` (brief said one `cached_tokens`) | `TokensUsed` reports both and they are priced differently; `tokens()` can still expose a combined "cached" figure |
 | `occurred_on` date column on entries (counted date, else used date) | `byDay()` and rollups group on a plain date, avoiding driver-specific date functions |
 | Daily grain: date, agent, provider, model, count method, currency, primary tag key/value | Accuracy is per model and count method; currencies are never summed. Model/provider are the used ones where known, else counted |
+| Rollup grain matches the raw query grain exactly: day (`occurred_on`), agent, provider and model answered else counted, count method, currency, primary tag value; accuracy sums use the `accuracy()` rule | Rolled-up totals equal raw totals for the same day (tested on all four databases) |
+| Daily table has `requests_with_usage` and `priced_requests` (added to the unreleased migration) | Warned requests are answered too, so neither follows from outcome counts; spend summaries need both |
+| Rollup rows store the configured `primary_tag` key even when a request lacked the tag (value null); `forgetTag()` clears only the value | Task 25 can tell whether rollups were built with the current key; a forgotten row reads as untagged, like its entries |
+| `primary_tag` is ignored unless it is also allowlisted | No entry can carry a tag that is not recorded |
 | Daily table has no unique key; rollup deletes and rebuilds a day | Nullable grain columns make unique keys unreliable (NULLs are distinct) across databases |
 | `percent_used` is `decimal(7,2)`; daily keeps sum, max and sample count | Exact on every driver and can exceed 100 for blocked requests; averages come from sum/count, not `AVG()` |
 | Index and foreign key names are explicit, built from `table_prefix` plus a short suffix | MySQL caps names at 64 chars; PostgreSQL needs them unique per schema |
@@ -121,7 +126,7 @@ Community docs: `CONTRIBUTING.md` (setup, checks, ground rules, adding a report 
 | Tags stored only for allowlisted keys, default empty | Nothing personal is recorded unless the app opts in; user IDs are personal data |
 | Never store prompt or response text | Privacy; enforced by arch tests |
 | `forgetTag()` deletes the tag rows, gives every affected run a fresh random `invocation_id` (all its steps, chunked 500 tags at a time), and keeps other tags and `request_id`; one transaction on the ledger connection; returns the entry count | Breaks the link to the app's logs and stored conversations while runs still group and totals stay correct; tenant-style tags usually are not personal data |
-| `forgetTag()` also clears a matching `primary_tag` in daily rollups | Rollups keep only the primary tag, so erasure must reach them too; promised in `SECURITY.md` |
+| `forgetTag()` also clears a matching `primary_tag_value` in daily rollups | Rollups keep only the primary tag, so erasure must reach them too; promised in `SECURITY.md` |
 | Tag values are stored as strings (bools as `1`/`0`); a value over 191 characters is skipped and reported, not truncated; allowlist keys over 64 characters are ignored | Truncation would keep part of what is probably free text; the column limits are fixed |
 | A tag that changes between events keeps the latest value written | One value per key per request (unique index); values normally match across a request's events |
 | `LedgerEntries` is its own final readonly list (iterable, countable, `collect()` for a Laravel collection), not a `Collection` subclass | `Collection::map()` returns `static`, which would let a typed collection hold anything |

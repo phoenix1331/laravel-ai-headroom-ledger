@@ -25,6 +25,8 @@ use Phoenix1331\AiHeadroomLedger\Support\TableNames;
  * @property string|null $primary_tag_key
  * @property string|null $primary_tag_value
  * @property int $requests
+ * @property int $requests_with_usage
+ * @property int $priced_requests
  * @property int $completed
  * @property int $warned
  * @property int $blocked
@@ -64,6 +66,8 @@ class DailyRollup extends LedgerModel
             'date' => DateOnly::class,
             'count_method' => CountMethod::class,
             'requests' => 'integer',
+            'requests_with_usage' => 'integer',
+            'priced_requests' => 'integer',
             'completed' => 'integer',
             'warned' => 'integer',
             'blocked' => 'integer',

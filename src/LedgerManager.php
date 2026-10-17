@@ -62,7 +62,8 @@ final class LedgerManager
      * Forget a data subject: delete every tag with this key and value, give
      * the runs those entries belong to fresh invocation IDs (so steps still
      * group together but no longer match the app's own logs), and clear the
-     * tag from daily rollups that used it as the primary tag.
+     * value from daily rollups that used it as the primary tag, so they read
+     * as untagged, like the entries.
      *
      * Other tags on the same entries are kept; call this once per personal
      * key. Entries recorded by listeners still on the queue are not covered,
@@ -92,7 +93,7 @@ final class LedgerManager
             DailyRollup::query()
                 ->where('primary_tag_key', $key)
                 ->where('primary_tag_value', $value)
-                ->update(['primary_tag_key' => null, 'primary_tag_value' => null]);
+                ->update(['primary_tag_value' => null]);
 
             return $forgotten;
         });

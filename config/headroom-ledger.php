@@ -60,7 +60,8 @@ return [
     | 191 characters; a longer value is skipped and reported, not truncated.
     |
     | primary_tag: one allowlisted key (for example "tenant_id") kept in the
-    |              daily rollups so per-tenant queries stay fast
+    |              daily rollups so per-tenant queries stay fast. It must
+    |              also be in the allowlist, or it is ignored
     |
     */
 

@@ -97,6 +97,8 @@ return new class extends Migration
             $table->string('primary_tag_value', 191)->nullable();
 
             $table->unsignedInteger('requests')->default(0);
+            $table->unsignedInteger('requests_with_usage')->default(0);
+            $table->unsignedInteger('priced_requests')->default(0);
             $table->unsignedInteger('completed')->default(0);
             $table->unsignedInteger('warned')->default(0);
             $table->unsignedInteger('blocked')->default(0);

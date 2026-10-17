@@ -24,7 +24,7 @@ const LEDGER_COLUMNS = [
     'headroom_ledger_tags' => ['id', 'request_id', 'key', 'value'],
     'headroom_ledger_daily' => [
         'id', 'date', 'agent', 'provider', 'model', 'count_method', 'currency', 'primary_tag_key', 'primary_tag_value',
-        'requests', 'completed', 'warned', 'blocked', 'failed', 'streamed',
+        'requests', 'requests_with_usage', 'priced_requests', 'completed', 'warned', 'blocked', 'failed', 'streamed',
         'estimated_input_tokens', 'actual_input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens',
         'estimated_cost', 'actual_cost', 'estimated_only_cost', 'estimated_only_requests', 'approximate_requests',
         'context_samples', 'percent_used_sum', 'percent_used_max',

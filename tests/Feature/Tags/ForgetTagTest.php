@@ -96,7 +96,7 @@ it('clears the subject from daily rollups that used it as the primary tag', func
     Ledger::forgetTag('user_id', 123);
 
     expect(DailyRollup::query()->where('actual_cost', 900)->firstOrFail())
-        ->primary_tag_key->toBeNull()
+        ->primary_tag_key->toBe('user_id')
         ->primary_tag_value->toBeNull()
         ->and(DailyRollup::query()->where('primary_tag_value', '456')->exists())->toBeTrue()
         ->and(DailyRollup::query()->where('primary_tag_key', 'tenant_id')->exists())->toBeTrue();
