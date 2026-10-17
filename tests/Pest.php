@@ -13,6 +13,9 @@ use Phoenix1331\AiHeadroom\Events\RequestBlocked;
 use Phoenix1331\AiHeadroom\Events\RequestFailed;
 use Phoenix1331\AiHeadroom\Events\TokensCounted;
 use Phoenix1331\AiHeadroom\Events\TokensUsed;
+use Phoenix1331\AiHeadroomLedger\Data\LedgerEntry;
+use Phoenix1331\AiHeadroomLedger\Data\Money;
+use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
 use Phoenix1331\AiHeadroomLedger\Tests\TestCase;
 
 pest()->extend(TestCase::class)->in('Unit', 'Feature');
@@ -159,4 +162,16 @@ function permutations(array $items): array
     }
 
     return $orders;
+}
+
+/**
+ * A minimal public ledger entry for value object tests.
+ */
+function entryVo(string $id, ?Money $estimated = null, ?Money $actual = null, ?int $input = null): LedgerEntry
+{
+    return new LedgerEntry(
+        $id, null, null, null, null, null, null, null, 100, null, null, null,
+        $input, $input === null ? null : 10, null, null, $estimated, $actual, false,
+        $actual === null ? Outcome::Counted : Outcome::Completed, null, null, null,
+    );
 }

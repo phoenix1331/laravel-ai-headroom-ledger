@@ -5,16 +5,6 @@ declare(strict_types=1);
 use Phoenix1331\AiHeadroomLedger\Data\LedgerEntries;
 use Phoenix1331\AiHeadroomLedger\Data\LedgerEntry;
 use Phoenix1331\AiHeadroomLedger\Data\Money;
-use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
-
-function entryVo(string $id, ?Money $estimated = null, ?Money $actual = null, ?int $input = null): LedgerEntry
-{
-    return new LedgerEntry(
-        $id, null, null, null, null, null, null, null, 100, null, null, null,
-        $input, $input === null ? null : 10, null, null, $estimated, $actual, false,
-        $actual === null ? Outcome::Counted : Outcome::Completed, null, null, null,
-    );
-}
 
 it('is an empty, countable, iterable list by default', function (): void {
     $entries = new LedgerEntries;

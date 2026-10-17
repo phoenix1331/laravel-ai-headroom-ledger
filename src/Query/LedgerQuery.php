@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use InvalidArgumentException;
 use Phoenix1331\AiHeadroomLedger\Data\LedgerEntries;
+use Phoenix1331\AiHeadroomLedger\Data\SpendSummary;
+use Phoenix1331\AiHeadroomLedger\Data\TokenTotals;
 use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
 use Phoenix1331\AiHeadroomLedger\Models\Entry;
 use Phoenix1331\AiHeadroomLedger\Support\TableNames;
@@ -144,6 +146,81 @@ final class LedgerQuery
     public function count(): int
     {
         return $this->rows()->count();
+    }
+
+    /**
+     * What the matching requests cost: actual where usage was reported, else
+     * the estimate, with both parts visible and every amount per currency.
+     */
+    public function spend(): SpendSummary
+    {
+        return Aggregator::totals($this->rows())['']['spend'] ?? new SpendSummary;
+    }
+
+    /**
+     * Token totals for the matching requests. Actual figures cover only
+     * requests whose usage was reported.
+     */
+    public function tokens(): TokenTotals
+    {
+        return Aggregator::totals($this->rows())['']['tokens'] ?? new TokenTotals;
+    }
+
+    /**
+     * Group by the model that answered, else the one counted.
+     */
+    public function byModel(): GroupedQuery
+    {
+        return new GroupedQuery($this, Grouping::Model);
+    }
+
+    /**
+     * Group by the provider that answered, else the one counted.
+     */
+    public function byProvider(): GroupedQuery
+    {
+        return new GroupedQuery($this, Grouping::Provider);
+    }
+
+    public function byAgent(): GroupedQuery
+    {
+        return new GroupedQuery($this, Grouping::Agent);
+    }
+
+    /**
+     * Group by the day each request was counted, oldest first.
+     */
+    public function byDay(): GroupedQuery
+    {
+        return new GroupedQuery($this, Grouping::Day);
+    }
+
+    /**
+     * Group by agent run (SDK invocation) rather than by provider call.
+     */
+    public function byRun(): GroupedQuery
+    {
+        return new GroupedQuery($this, Grouping::Run);
+    }
+
+    /**
+     * Group by the value of one context tag; requests without it form the null group.
+     */
+    public function byTag(string $key): GroupedQuery
+    {
+        return new GroupedQuery($this, Grouping::Tag, $key);
+    }
+
+    /**
+     * The date range filter, as inclusive "Y-m-d" days.
+     *
+     * @internal
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    public function range(): ?array
+    {
+        return $this->from === null || $this->to === null ? null : [$this->from, $this->to];
     }
 
     /**

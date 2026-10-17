@@ -96,6 +96,8 @@ final readonly class LedgerEntry
             $this->outputTokens ?? 0,
             $this->cacheReadTokens ?? 0,
             $this->cacheWriteTokens ?? 0,
+            requests: 1,
+            requestsWithUsage: $this->hasUsage() ? 1 : 0,
         );
     }
 }
