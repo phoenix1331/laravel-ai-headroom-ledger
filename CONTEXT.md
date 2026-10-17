@@ -22,6 +22,9 @@ This is a Composer **package**, not a Laravel app. There is no `app/`, no routes
 | `src/Models/` | `@internal` Eloquent models: `LedgerModel` (base: no timestamps, connection from config unless set explicitly), `Entry` (string PK `request_id`, enum casts for `count_method`/`outcome`, `breakdown` array, money as int), `Tag`, `DailyRollup`. Never returned by the public API |
 | `src/Enums/Outcome.php` | `counted`, `completed`, `warned`, `blocked`, `failed` |
 | `src/Support/` | `@internal`: `TableNames` (prefix + connection from config), `MicroUnits` (amount <-> integer millionths, rounded) |
+| `src/Support/Casts/` | Privacy guards on `Entry`: `TokenBreakdown` (section names to whole token counts only; read back in a fixed section order), `ReasonCode` (a `LimitType` value or `ExceptionClass[:status]`; messages throw) |
+| `tests/Arch/` | Arch suite: no debug calls, strict types, Pest `php` and `security` presets, string-backed enums, final support classes |
+| `tests/Feature/Privacy/` | Schema guard: exact reviewed column list per table, no text/blob types outside `breakdown`, no column named after prompt/response content, migrations declare no text/binary columns |
 | `database/factories/LedgerEntryFactory.php` | Public, shipped for the Filament plugin and app seeding (`Entry::factory()` or `LedgerEntryFactory::new()`). Default is a completed request; states `counted`, `completed`, `warned`, `blocked`, `failed`, `streamed`, `abandoned`, `approximateCost`, `failover`, `inRun`, `forAgent`, `forModel`, `countMethod`, `inCurrency`, `at`, `withTags`. No Faker |
 | `tests/` | Pest + Testbench; `TestCase` loads laravel/ai, Headroom and the ledger, blocks stray HTTP |
 | `testbench.yaml` | Providers and migrations for `vendor/bin/testbench` (manual artisan runs, smoke test) |
@@ -85,10 +88,12 @@ Community docs: `CONTRIBUTING.md` (setup, checks, ground rules, adding a report 
 | Internal models are `Entry`, `Tag`, `DailyRollup`, not `LedgerEntry` | `LedgerEntry` is reserved for the public value object returned by `Ledger::find()` |
 | `currency` stays a plain 3-letter string on models, not Headroom's `Currency` enum | Headroom's enum only has USD and GBP; old rows must still load if it changes |
 | `TestCase::tearDown()` resets `headroom-ledger.connection` and `table_prefix` before `parent::tearDown()` | Testbench rolls migrations back in a callback registered before `defineDatabaseMigrations()`, so a test that changed either would roll back the wrong tables and leak them into the next test on a persistent database |
-| `breakdown` key order is not guaranteed | MySQL's JSON type reorders keys; the public value object must normalise the order |
+| `breakdown` key order is normalised by the `TokenBreakdown` cast | MySQL's JSON type reorders keys |
 | Factory states set only what they change; one `afterMaking` pass derives breakdown, percent used, usage, costs and dates | Any combination of states stays internally consistent (estimate = breakdown sum, costs follow tokens and the answering model's price) |
 | Factory uses `random_int()` and fixed model data, not Faker | Faker is usually a dev dependency; apps can seed demo data anywhere |
 | `outcome_reason` for failures is `ExceptionClass:status` (class alone when no status) | Exception class and HTTP status only, never the message; one string column, easy to group |
+| Privacy is enforced at write time by model casts, not only by listener code | A listener bug or a future contributor cannot store text in `breakdown` or `outcome_reason`; tags remain the only free-form values and are allowlisted |
+| Adding a ledger column means updating `tests/Feature/Privacy/SchemaPrivacyTest.php` | Forces a deliberate review that the column cannot hold text |
 | Query API is the only supported read path; returns final readonly value objects, never Eloquent models | Schema can change without breaking consumers (Filament plugin included) |
 | Tags stored only for allowlisted keys, default empty | Nothing personal is recorded unless the app opts in; user IDs are personal data |
 | Never store prompt or response text | Privacy; enforced by arch tests |

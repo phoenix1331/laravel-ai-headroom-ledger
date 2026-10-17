@@ -71,7 +71,8 @@ class LedgerEntryFactory extends Factory
      */
     public function definition(): array
     {
-        $model = array_rand(self::MODELS);
+        $models = array_keys(self::MODELS);
+        $model = $models[random_int(0, count($models) - 1)];
         $countedAt = Carbon::now()->subMinutes(random_int(0, 30 * 24 * 60));
 
         return [

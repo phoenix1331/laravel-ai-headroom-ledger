@@ -10,10 +10,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Phoenix1331\AiHeadroom\Enums\CountMethod;
 use Phoenix1331\AiHeadroomLedger\Database\Factories\LedgerEntryFactory;
 use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
+use Phoenix1331\AiHeadroomLedger\Support\Casts\ReasonCode;
+use Phoenix1331\AiHeadroomLedger\Support\Casts\TokenBreakdown;
 use Phoenix1331\AiHeadroomLedger\Support\TableNames;
 
 /**
- * One AI provider call. Money columns are integer micro-units.
+ * One AI provider call. Money columns are integer micro-units. No attribute
+ * can hold prompt or response text: see the TokenBreakdown and ReasonCode casts.
  *
  * @internal Read the ledger through the query API, never this model.
  *
@@ -87,7 +90,7 @@ class Entry extends LedgerModel
         return [
             'count_method' => CountMethod::class,
             'estimated_input_tokens' => 'integer',
-            'breakdown' => 'array',
+            'breakdown' => TokenBreakdown::class,
             'context_window' => 'integer',
             'percent_used' => 'float',
             'actual_input_tokens' => 'integer',
@@ -99,6 +102,7 @@ class Entry extends LedgerModel
             'cost_approximate' => 'boolean',
             'streamed' => 'boolean',
             'outcome' => Outcome::class,
+            'outcome_reason' => ReasonCode::class,
             'occurred_on' => 'immutable_date',
             'counted_at' => 'immutable_datetime',
             'used_at' => 'immutable_datetime',
