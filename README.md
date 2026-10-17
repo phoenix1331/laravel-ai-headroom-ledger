@@ -7,7 +7,7 @@ Headroom Ledger records [Headroom](https://github.com/phoenix1331/laravel-ai-hea
 [![Tests](https://github.com/phoenix1331/laravel-ai-headroom-ledger/actions/workflows/tests.yml/badge.svg)](https://github.com/phoenix1331/laravel-ai-headroom-ledger/actions/workflows/tests.yml)
 [![Static analysis](https://github.com/phoenix1331/laravel-ai-headroom-ledger/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/phoenix1331/laravel-ai-headroom-ledger/actions/workflows/static-analysis.yml)
 [![Packagist](https://img.shields.io/packagist/v/phoenix1331/laravel-ai-headroom-ledger.svg)](https://packagist.org/packages/phoenix1331/laravel-ai-headroom-ledger)
-[![Licence](https://img.shields.io/packagist/l/phoenix1331/laravel-ai-headroom-ledger.svg)](LICENSE)
+[![Licence](https://img.shields.io/github/license/phoenix1331/laravel-ai-headroom-ledger.svg)](LICENSE)
 
 ![headroom-ledger:report for the last 7 days by agent: spend and tokens, context usage and limits per agent, and estimate accuracy per model and count method](docs/headroom-ledger-report.gif)
 
