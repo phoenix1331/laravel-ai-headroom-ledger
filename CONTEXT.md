@@ -18,7 +18,7 @@ This is a Composer **package**, not a Laravel app. There is no `app/`, no routes
 |---|---|
 | `src/AiHeadroomLedgerServiceProvider.php` | Merges `config/headroom-ledger.php`; publish tags `headroom-ledger-config`, `headroom-ledger-migrations` |
 | `config/headroom-ledger.php` | `enabled`, `connection`, `table_prefix`, `queue` (connection `sync` records inline), `tags.allowed` (default empty), `tags.primary_tag`, `retention_days.entries`/`rollups`, `rollup.enabled`/`time` |
-| `database/migrations/` | Publishable, database-agnostic: `entries`, `tags`, `daily` tables |
+| `database/migrations/` | One publishable migration creating `{prefix}entries`, `{prefix}tags`, `{prefix}daily`; honours `connection` via `getConnection()` and `table_prefix`. Not auto-loaded: apps publish and migrate; tests load it in `TestCase::defineDatabaseMigrations()` |
 | `database/factories/` | `LedgerEntryFactory`, shipped for the Filament plugin and app seeding |
 | `tests/` | Pest + Testbench; `TestCase` loads laravel/ai, Headroom and the ledger, blocks stray HTTP |
 | `testbench.yaml` | Providers and migrations for `vendor/bin/testbench` (manual artisan runs, smoke test) |
@@ -71,6 +71,14 @@ Community docs: `CONTRIBUTING.md` (setup, checks, ground rules, adding a report 
 | Decision | Reason |
 |---|---|
 | Money stored as integer micro-units (millionths) plus `currency` | A single call often costs a fraction of a cent; minor units would round most rows to zero. Integers keep sums exact and portable across databases |
+| `request_id` is `string(64)`, not a 26-char ULID column | Headroom generates ULIDs but `Headroom::for()` accepts a caller-supplied ID; invocation IDs are SDK UUIDv7 |
+| Cache tokens stored as `cache_read_tokens` and `cache_write_tokens` (brief said one `cached_tokens`) | `TokensUsed` reports both and they are priced differently; `tokens()` can still expose a combined "cached" figure |
+| `occurred_on` date column on entries (counted date, else used date) | `byDay()` and rollups group on a plain date, avoiding driver-specific date functions |
+| Daily grain: date, agent, provider, model, count method, currency, primary tag key/value | Accuracy is per model and count method; currencies are never summed. Model/provider are the used ones where known, else counted |
+| Daily table has no unique key; rollup deletes and rebuilds a day | Nullable grain columns make unique keys unreliable (NULLs are distinct) across databases |
+| `percent_used` is `decimal(7,2)`; daily keeps sum, max and sample count | Exact on every driver and can exceed 100 for blocked requests; averages come from sum/count, not `AVG()` |
+| Index and foreign key names are explicit, built from `table_prefix` plus a short suffix | MySQL caps names at 64 chars; PostgreSQL needs them unique per schema |
+| `DB_FOREIGN_KEYS=true` in `phpunit.xml` | Testbench's in-memory `testing` connection disables SQLite foreign keys by default; real apps have them on, and tag cascade deletes depend on them |
 | Query API is the only supported read path; returns final readonly value objects, never Eloquent models | Schema can change without breaking consumers (Filament plugin included) |
 | Tags stored only for allowlisted keys, default empty | Nothing personal is recorded unless the app opts in; user IDs are personal data |
 | Never store prompt or response text | Privacy; enforced by arch tests |
