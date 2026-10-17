@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Headroom Ledger for Laravel</title>
+<meta name="description" content="A ledger of every AI request your app makes: estimated, used, spent. Records Headroom events per provider call and reports on them through a typed query API and artisan.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* Same tokens and components as the Headroom site, so the packages read as one suite. */
+  :root {
+    color-scheme: dark;
+    --fog: #10182B;
+    --paper: #18233A;
+    --ink: #E7ECF3;
+    --ink-soft: #A9B5C9;
+    --rule: #2E3B57;
+    --limit: #FF5A5F;
+    --instructions: #6FA3DB;
+    --history: #F2C14E;
+    --tools: #5CC08A;
+    --attachments: #B88AD0;
+    --prompt: #F07A8A;
+    --code-bg: #0A1020;
+    --code-ink: #E7ECF3;
+    --hatch: #3A4866;
+    --estimate: var(--instructions);
+    --actual: var(--tools);
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--fog);
+    color: var(--ink);
+    font-family: "Archivo", system-ui, sans-serif;
+    font-variation-settings: "wdth" 100;
+    font-size: 1.0625rem;
+    line-height: 1.6;
+  }
+
+  a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  a:hover { text-decoration-thickness: 2px; }
+  :focus-visible { outline: 3px solid var(--instructions); outline-offset: 3px; border-radius: 2px; }
+
+  .wrap { max-width: 72rem; margin: 0 auto; padding: 0 1rem; }
+  .measure { max-width: 42rem; }
+
+  h1, h2, h3 { font-variation-settings: "wdth" 125; line-height: 1.1; letter-spacing: -0.01em; }
+  h1 { font-size: clamp(2.25rem, 6vw, 4.25rem); font-weight: 800; margin: 0 0 1.25rem; max-width: 17ch; }
+  h2 { font-size: clamp(1.5rem, 3vw, 2.125rem); font-weight: 750; margin: 0 0 1rem; }
+  h3 { font-size: 1.125rem; font-weight: 700; margin: 2rem 0 0.5rem; }
+  p { margin: 0 0 1rem; }
+  .lede { font-size: 1.25rem; color: var(--ink-soft); max-width: 40rem; }
+
+  header.site { padding: 1.25rem 0; }
+  header.site .wrap { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .brand { font-weight: 800; font-variation-settings: "wdth" 125; text-decoration: none; font-size: 1.25rem; display: inline-flex; align-items: baseline; gap: 0.4rem; }
+  .brand span { color: var(--history); }
+
+  nav.links { display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: 0.9375rem; }
+
+  .hero { padding-top: 3rem; padding-bottom: 2rem; }
+
+  .install {
+    margin: 0.5rem 0 2.5rem; background: var(--code-bg); color: var(--code-ink); border-radius: 6px;
+    padding: 0.75rem 0.75rem 0.75rem 1rem; display: flex; align-items: flex-start; gap: 0.75rem; max-width: 46rem;
+  }
+  .install pre { margin: 0; padding: 0; background: none; font-size: 0.9375rem; flex: 1; min-width: 0; }
+  .install button {
+    font: inherit; font-family: "Archivo", sans-serif; font-size: 0.875rem; font-weight: 600; flex: none;
+    background: var(--code-ink); color: var(--code-bg); border: 0; border-radius: 4px; padding: 0.35rem 0.75rem; cursor: pointer;
+  }
+
+  /* The ledger row: the one bold element on the page */
+  .ledger { margin: 0; background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 1.5rem; }
+  .ledger-title { font-weight: 700; margin: 0 0 1rem; }
+
+  .scenarios { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 1.25rem; }
+  .scenarios button {
+    font: inherit; font-size: 0.9375rem; font-weight: 600; cursor: pointer; color: var(--ink);
+    background: transparent; border: 1px solid var(--rule); border-radius: 999px; padding: 0.35rem 0.9rem;
+  }
+  .scenarios button[aria-pressed="true"] { background: var(--ink); color: var(--fog); border-color: var(--ink); }
+
+  .ledger-grid { display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+
+  .events { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+  .events li {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.875rem; padding: 0.5rem 0.75rem;
+    border-radius: 6px; border: 1px solid var(--rule); color: var(--ink-soft); opacity: 0.35; position: relative;
+  }
+  .events li.fired { opacity: 1; color: var(--ink); border-color: var(--ink-soft); }
+  .events li.fired::after { content: "\2192"; position: absolute; right: 0.75rem; color: var(--history); }
+  .events-note { font-size: 0.8125rem; color: var(--ink-soft); margin: 0.75rem 0 0; }
+
+  .row { border: 1px solid var(--rule); border-radius: 8px; background: var(--fog); padding: 1rem 1.25rem; }
+  .row-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 1rem; align-items: baseline; margin-bottom: 1rem; }
+  .row-id { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.875rem; color: var(--ink-soft); }
+  .chip { font-weight: 700; font-size: 0.875rem; padding: 0.15rem 0.6rem; border-radius: 4px; border: 1px solid currentColor; }
+  .chip.completed { color: var(--tools); }
+  .chip.warned { color: var(--history); }
+  .chip.blocked, .chip.failed { color: var(--limit); }
+  .chip.counted { color: var(--ink-soft); }
+
+  .fields { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 0.6rem 1rem; margin: 0; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+  .fields dt { color: var(--ink-soft); }
+  .fields dd { margin: 0; min-width: 0; }
+  .null { font-family: "JetBrains Mono", ui-monospace, monospace; color: var(--ink-soft); font-size: 0.875rem; }
+
+  .pair { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto; gap: 0.25rem 0.75rem; align-items: center; }
+  .pair .label { font-size: 0.8125rem; color: var(--ink-soft); }
+  .track { height: 0.75rem; border-radius: 3px; background: repeating-linear-gradient(135deg, transparent 0 6px, var(--hatch) 6px 8px); border: 1px solid var(--rule); overflow: hidden; }
+  .fill { height: 100%; transition: width 160ms ease-out; }
+  .fill.estimate { background: var(--estimate); }
+  .fill.actual { background: var(--actual); }
+  .pair .value { text-align: right; min-width: 7ch; }
+
+  .context { position: relative; }
+  .context .track { height: 1rem; }
+  .context .fill { background: var(--history); }
+  .context.over .fill { background: var(--limit); }
+  .context .limit-line { position: absolute; top: -4px; bottom: -4px; left: 80%; border-left: 2px dashed var(--limit); }
+
+  .row-note { margin: 1rem 0 0; padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.9375rem; border-left: 4px solid var(--tools); background: color-mix(in srgb, var(--tools) 10%, var(--paper)); }
+  .row-note.warn { border-left-color: var(--history); background: color-mix(in srgb, var(--history) 10%, var(--paper)); }
+  .row-note.stop { border-left-color: var(--limit); background: color-mix(in srgb, var(--limit) 10%, var(--paper)); }
+
+  section { padding: 3.5rem 0; border-top: 1px solid var(--rule); }
+
+  code, pre { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  :not(pre) > code { font-size: 0.9em; background: color-mix(in srgb, var(--ink) 8%, transparent); padding: 0.1em 0.35em; border-radius: 4px; }
+  pre {
+    background: var(--code-bg); color: var(--code-ink); padding: 1.125rem 1.25rem; border-radius: 8px;
+    overflow-x: auto; font-size: 0.875rem; line-height: 1.6; margin: 0 0 1.25rem; max-width: 46rem;
+  }
+  pre .c { color: #8FA0BC; }
+  pre .k { color: #F2C14E; }
+  pre .s { color: #8FD3A8; }
+
+  pre.terminal { max-width: 60rem; }
+  img.demo { display: block; width: 100%; max-width: 60rem; height: auto; border-radius: 8px; border: 1px solid var(--rule); margin: 0 0 0.75rem; }
+  details.text-version { max-width: 60rem; margin: 0 0 1.25rem; }
+  details.text-version summary { cursor: pointer; color: var(--ink-soft); font-size: 0.9375rem; margin-bottom: 0.75rem; }
+  .caption { font-size: 0.875rem; color: var(--ink-soft); margin: -0.5rem 0 1.25rem; }
+
+  .steps { list-style: none; padding: 0; margin: 0; counter-reset: step; max-width: 46rem; }
+  .steps > li { counter-increment: step; position: relative; padding-left: 2.75rem; margin-bottom: 1.5rem; }
+  .steps > li::before {
+    content: counter(step); position: absolute; left: 0; top: 0.1rem; width: 1.875rem; height: 1.875rem; border-radius: 50%;
+    border: 2px solid var(--ink); display: grid; place-items: center; font-weight: 800; font-size: 0.9375rem;
+  }
+  .steps h3 { margin-top: 0.15rem; }
+
+  table { border-collapse: collapse; width: 100%; max-width: 46rem; margin: 0 0 1.25rem; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 0.6rem 0.75rem 0.6rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-weight: 700; }
+  .table-scroll { overflow-x: auto; max-width: 100%; }
+
+  .flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; max-width: 56rem; margin: 1.5rem 0; padding: 0; list-style: none; }
+  .flow li { padding: 1rem 1.25rem 1rem 0; border-top: 3px solid var(--ink); font-size: 0.9375rem; }
+  .flow li strong { display: block; margin-bottom: 0.25rem; }
+
+  .family { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; max-width: 60rem; margin: 1.5rem 0 0; padding: 0; list-style: none; }
+  .family li { border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.25rem; background: var(--paper); }
+  .family li.here { border-color: var(--history); }
+  .family strong { display: block; font-variation-settings: "wdth" 115; margin-bottom: 0.25rem; }
+  .family code { font-size: 0.8125rem; word-break: break-all; }
+  .family p { margin: 0.5rem 0 0; font-size: 0.9375rem; color: var(--ink-soft); }
+
+  footer { padding: 2.5rem 0 3.5rem; border-top: 1px solid var(--rule); color: var(--ink-soft); font-size: 0.9375rem; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 1rem 2rem; justify-content: space-between; }
+
+  @media (max-width: 720px) {
+    .ledger { padding: 1rem; }
+    .ledger-grid { grid-template-columns: 1fr; }
+    .events { grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
+    .fields { grid-template-columns: 1fr; gap: 0.15rem; }
+    .fields dd { margin-bottom: 0.6rem; }
+    .flow, .family { grid-template-columns: 1fr; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fill { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="#">Headroom <span>Ledger</span></a>
+    <nav class="links" aria-label="Project">
+      <a href="https://github.com/phoenix1331/laravel-ai-headroom-ledger">GitHub</a>
+      <a href="https://packagist.org/packages/phoenix1331/laravel-ai-headroom-ledger">Packagist</a>
+      <a href="https://github.com/phoenix1331/laravel-ai-headroom-ledger/blob/main/CHANGELOG.md">Changelog</a>
+      <a href="https://phoenix1331.github.io/laravel-ai-headroom">Headroom</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="hero wrap">
+    <h1>A ledger of every AI request your app makes: estimated, used, spent.</h1>
+    <p class="lede">Headroom Ledger records <a href="https://phoenix1331.github.io/laravel-ai-headroom">Headroom</a>'s events in your database, one row per provider call: what was estimated before it was sent, what was actually used, what it cost, how close it came to the context limit, and whether it was warned or blocked. Then it answers questions about them through a typed query API and an artisan report.</p>
+
+    <div class="install">
+      <pre id="install-command">composer require phoenix1331/laravel-ai-headroom-ledger
+php artisan vendor:publish --tag=headroom-ledger-migrations
+php artisan migrate</pre>
+      <button type="button" id="copy-install">Copy</button>
+    </div>
+
+    <figure class="ledger" aria-labelledby="ledger-title">
+      <p class="ledger-title" id="ledger-title">What gets recorded: one request, one row</p>
+
+      <div class="scenarios" role="group" aria-label="Choose what happened to the request">
+        <button type="button" data-scenario="completed" aria-pressed="true">Completed</button>
+        <button type="button" data-scenario="warned" aria-pressed="false">Warned</button>
+        <button type="button" data-scenario="blocked" aria-pressed="false">Blocked</button>
+        <button type="button" data-scenario="failover" aria-pressed="false">Failed over</button>
+        <button type="button" data-scenario="unreported" aria-pressed="false">Never reported</button>
+      </div>
+
+      <div class="ledger-grid">
+        <div>
+          <ul class="events" aria-label="Headroom events fired">
+            <li data-event="TokensCounted">TokensCounted</li>
+            <li data-event="HeadroomLow">HeadroomLow</li>
+            <li data-event="RequestBlocked">RequestBlocked</li>
+            <li data-event="RequestFailed">RequestFailed</li>
+            <li data-event="TokensUsed">TokensUsed</li>
+          </ul>
+          <p class="events-note">Queued listeners can run in any order. Every event upserts the same row, so it settles the same either way.</p>
+        </div>
+
+        <div class="row" aria-live="polite">
+          <div class="row-head">
+            <span class="row-id">01JB7QK4XW2M9R3T6V8Y0ZC1DE</span>
+            <span class="chip" id="outcome"></span>
+          </div>
+          <dl class="fields">
+            <dt>Agent</dt><dd><code>App\Ai\Agents\SupportAgent</code></dd>
+            <dt>Model</dt><dd id="model"></dd>
+            <dt>Input tokens</dt>
+            <dd>
+              <div class="pair">
+                <span class="label">estimated</span><div class="track"><div class="fill estimate" id="est-bar"></div></div><span class="value" id="est-tokens"></span>
+                <span class="label">actual</span><div class="track"><div class="fill actual" id="act-bar"></div></div><span class="value" id="act-tokens"></span>
+              </div>
+            </dd>
+            <dt>Cost</dt>
+            <dd>
+              <div class="pair">
+                <span class="label">estimated</span><div class="track"><div class="fill estimate" id="est-cost-bar"></div></div><span class="value" id="est-cost"></span>
+                <span class="label">actual</span><div class="track"><div class="fill actual" id="act-cost-bar"></div></div><span class="value" id="act-cost"></span>
+              </div>
+            </dd>
+            <dt>Context used</dt>
+            <dd>
+              <div class="pair context" id="context">
+                <span class="label">window</span>
+                <div class="track" style="position: relative"><div class="fill" id="ctx-bar"></div><span class="limit-line" aria-hidden="true"></span></div>
+                <span class="value" id="ctx"></span>
+              </div>
+            </dd>
+            <dt>Reason</dt><dd id="reason"></dd>
+          </dl>
+          <p class="row-note" id="note" role="status"></p>
+        </div>
+      </div>
+    </figure>
+  </div>
+
+  <section id="why">
+    <div class="wrap"><div class="measure">
+      <h2>The pre-flight side of AI spend</h2>
+      <p>AI cost dashboards already exist for Laravel. They know what a request cost after it ran. Headroom Ledger also knows what was predicted before it ran, because Headroom counted it first.</p>
+      <p>That answers questions a cost log cannot: how far off are the estimates for each model, which agents creep towards their context limit, how many requests were warned or blocked, and what the requests that never completed would have cost. Headroom stays lean with no migrations; the ledger is the separate package for teams who want the history.</p>
+    </div></div>
+  </section>
+
+  <section id="report">
+    <div class="wrap">
+      <div class="measure">
+        <h2>A report, before any dashboard</h2>
+        <p>The data is useful the moment it is recorded. <code>headroom-ledger:report</code> prints spend, tokens, context usage, limits and estimate accuracy, grouped by model, provider, agent, day, run or a tag. Add <code>--json</code> to send it somewhere else.</p>
+      </div>
+<img class="demo" src="headroom-ledger-report.gif" width="1120" height="680" loading="lazy" alt="headroom-ledger:report --since=7d --by=agent: spend and tokens, context usage and limits per agent, and estimate accuracy per model and count method">
+      <details class="text-version">
+        <summary>Text version</summary>
+<pre class="terminal"><span class="c">$</span> php artisan headroom-ledger:report --since=7d --by=agent
+
+   INFO  Headroom Ledger, 2026-10-11 to 2026-10-17.
+
+  Spend and tokens
++---------------+----------+-----------------+-----------+---------+--------+-----------------+
+| Agent         | Requests | Spend           | Input     | Output  | Cached | Estimated input |
++---------------+----------+-----------------+-----------+---------+--------+-----------------+
+| ResearchAgent | 35       | USD 2.640355 *  | 1,364,542 | 30,688  | 0      | 1,922,658       |
+| SummaryAgent  | 60       | USD 2.621439 *  | 1,900,614 | 55,793  | 0      | 2,252,423       |
+| SupportAgent  | 140      | USD 19.213263 * | 4,397,366 | 139,303 | 0      | 5,693,587       |
+| Total         | 235      | USD 24.475057 * | 7,662,522 | 225,784 | 0      | 9,868,668       |
++---------------+----------+-----------------+-----------+---------+--------+-----------------+
+  Context and limits
++---------------+----------+-------------+-------------+--------+---------+--------+
+| Agent         | Requests | Avg context | Max context | Warned | Blocked | Failed |
++---------------+----------+-------------+-------------+--------+---------+--------+
+| ResearchAgent | 35       | 13.7%       | 123.5%      | 2      | 1       | 0      |
+| SummaryAgent  | 60       | 18.8%       | 128.1%      | 5      | 1       | 2      |
+| SupportAgent  | 140      | 20.3%       | 125.6%      | 10     | 5       | 5      |
+| Total         | 235      | 19.0%       | 128.1%      | 17     | 7       | 7      |
++---------------+----------+-------------+-------------+--------+---------+--------+
+  Estimate accuracy (requests that reported usage from the model counted)
++-------------------+------------+---------+-------+-------+
+| Model             | Method     | Samples | Error | Bias  |
++-------------------+------------+---------+-------+-------+
+| claude-haiku-5-5  | calibrated | 53      | 6.4%  | +2.9% |
+| claude-sonnet-5-5 | native     | 129     | 5.8%  | -1.0% |
+| gpt-5             | estimated  | 34      | 5.9%  | -4.7% |
+| All               |            | 216     | 5.9%  | -0.7% |
++-------------------+------------+---------+-------+-------+
+  * includes pre-flight estimates for requests that never reported usage</pre>
+      </details>
+      <p class="caption">Real output from a week of demo data (the workbench <code>DemoLedgerSeeder</code>, built on the package's <code>LedgerEntryFactory</code>); the figures are illustrative.</p>
+    </div>
+  </section>
+
+  <section id="query">
+    <div class="wrap">
+      <div class="measure">
+        <h2>A query API that returns values, not models</h2>
+        <p>The query API is the only supported way to read the ledger, so the schema can change without breaking anything built on it. Results are typed, readonly value objects; no Eloquent model leaves the package.</p>
+      </div>
+<pre><span class="k">use</span> Phoenix1331\AiHeadroomLedger\Facades\Ledger;
+
+Ledger::query()
+    ->between(now()->subDays(<span class="s">30</span>), now())
+    ->forAgent(SupportAgent::<span class="k">class</span>)
+    ->forTag(<span class="s">'tenant_id'</span>, <span class="s">42</span>)
+    ->spend();                       <span class="c">// actual where known, else estimated, flagged</span>
+
+Ledger::query()->lastDays(<span class="s">7</span>)->byModel()->tokens();      <span class="c">// input, output, cached per model</span>
+Ledger::query()->lastDays(<span class="s">7</span>)->byDay()->spend();         <span class="c">// every day, ready to chart</span>
+Ledger::query()->lastDays(<span class="s">30</span>)->accuracy();              <span class="c">// estimate error per model and count method</span>
+Ledger::query()->lastDays(<span class="s">7</span>)->nearLimit(<span class="s">80</span>)->entries(); <span class="c">// requests at or above 80% of context</span>
+Ledger::query()->lastDays(<span class="s">7</span>)->blocked()->entries();     <span class="c">// blocked or warned</span>
+Ledger::query()->lastDays(<span class="s">7</span>)->byRun()->spend();         <span class="c">// per agent run, not per call</span>
+Ledger::find($requestId);                                <span class="c">// one LedgerEntry</span>
+Ledger::run($invocationId);                              <span class="c">// every step of an agent run, with totals</span></pre>
+      <div class="measure">
+        <p>Honest by design. A request that never reported usage has an estimate but no actual figures; it is never counted as zero. <code>spend()</code> keeps the reported and estimate-only parts separate, every amount carries its currency and whether it is an estimate, and different currencies are never added together. Money is held as integer millionths, so a request that cost a fraction of a cent still shows up.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="rollups">
+    <div class="wrap">
+      <div class="measure">
+        <h2>Fast as it grows: daily rollups</h2>
+        <p>Aggregates read closed days from daily rollups and today from the raw entries, and give exactly the same answer as reading every entry. Filters a rollup cannot answer, such as <code>nearLimit()</code> or a run, simply read the entries.</p>
+      </div>
+      <ol class="flow">
+        <li><strong>Record</strong>Every request is a raw entry, written by queued listeners</li>
+        <li><strong>Roll up</strong>Each night, closed days are summed by model, agent and your primary tag</li>
+        <li><strong>Query</strong>Rollups for closed days, entries for today, merged into one answer</li>
+        <li><strong>Prune</strong>Old entries go after their retention; their totals stay in the rollups</li>
+      </ol>
+      <div class="measure">
+        <h3>Scheduling</h3>
+        <p>Both commands are scheduled for you on a cron expression you can change. Each rollup run catches up every closed day since the last one, so any frequency is safe.</p>
+<pre><span class="c">// config/headroom-ledger.php</span>
+<span class="s">'rollup'</span> => [<span class="s">'enabled'</span> => <span class="k">true</span>, <span class="s">'schedule'</span> => <span class="s">'15 0 * * *'</span>],
+<span class="s">'prune'</span>  => [<span class="s">'schedule'</span> => <span class="s">'30 0 * * *'</span>],</pre>
+        <p>Prefer to schedule them yourself? Set either schedule to <code>false</code> and add your own entry, for example in <code>routes/console.php</code>:</p>
+<pre>Schedule::command(<span class="s">'headroom-ledger:rollup'</span>)->hourly()->onOneServer();
+Schedule::command(<span class="s">'headroom-ledger:prune'</span>)->daily()->onOneServer();</pre>
+        <p>Run them on one server: <code>onOneServer()</code> needs a cache store that supports locks (Redis, Memcached, database or DynamoDB). Rollups are a snapshot of each closed day; if entries for an older day arrive late, rebuild it with <code>php artisan headroom-ledger:rollup --from=2026-10-01</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="privacy">
+    <div class="wrap"><div class="measure">
+      <h2>Numbers, not conversations</h2>
+      <p>The ledger never stores prompt, instruction, tool or response text. An architecture test fails the build if any column could hold it.</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Stored</th><th>Never stored</th></tr></thead>
+          <tbody>
+            <tr><td>Token counts and the per-part breakdown</td><td>Prompts, instructions and conversation history</td></tr>
+            <tr><td>Estimated and actual cost, with currency</td><td>Tool definitions, arguments and results</td></tr>
+            <tr><td>Agent class, provider and model names</td><td>Responses</td></tr>
+            <tr><td>Context window and percentage used</td><td>Exception messages (only the class and HTTP status)</td></tr>
+            <tr><td>Outcome: counted, completed, warned, blocked or failed</td><td>Any tag whose key is not on your allowlist</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>Tags are opt in</h3>
+      <p>Headroom can tag requests with your own context, such as a tenant or user. The ledger stores a tag only if its key is on the <code>tags.allowed</code> list, which is empty by default. A user ID is personal data, so record it only if you need it.</p>
+<pre><span class="s">'tags'</span> => [<span class="s">'allowed'</span> => [<span class="s">'tenant_id'</span>], <span class="s">'primary_tag'</span> => <span class="s">'tenant_id'</span>],</pre>
+      <h3>Retention and erasure</h3>
+      <p>Raw entries and rollups have their own retention (90 days and two years by default). For a data subject request, <code>Ledger::forgetTag('user_id', 123)</code> removes the tag everywhere, gives that person's agent runs new random IDs so they no longer match your logs, and keeps the totals correct. Read the <a href="https://github.com/phoenix1331/laravel-ai-headroom-ledger/blob/main/SECURITY.md">security policy</a> for the full picture.</p>
+    </div></div>
+  </section>
+
+  <section id="family">
+    <div class="wrap">
+      <div class="measure">
+        <h2>Part of the Headroom family</h2>
+        <p>Three packages, each useful on its own.</p>
+      </div>
+      <ul class="family">
+        <li>
+          <strong><a href="https://phoenix1331.github.io/laravel-ai-headroom">Headroom</a></strong>
+          <code>phoenix1331/laravel-ai-headroom</code>
+          <p>Counts a request before it is sent, guards context and cost limits, and fires the events the ledger records.</p>
+        </li>
+        <li class="here">
+          <strong>Headroom Ledger</strong>
+          <code>phoenix1331/laravel-ai-headroom-ledger</code>
+          <p>This package. Stores those events per request and answers questions about them.</p>
+        </li>
+        <li>
+          <strong><a href="https://github.com/phoenix1331/filament-headroom">Filament Headroom</a></strong>
+          <code>phoenix1331/filament-headroom</code>
+          <p>A Filament dashboard built on the ledger's query API. Coming next.</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Headroom Ledger is open source under the MIT licence.</span>
+    <nav class="links" aria-label="More">
+      <a href="https://github.com/phoenix1331/laravel-ai-headroom-ledger#readme">Full documentation</a>
+      <a href="https://github.com/phoenix1331/laravel-ai-headroom-ledger/blob/main/CHANGELOG.md">Changelog</a>
+      <a href="https://github.com/phoenix1331/laravel-ai-headroom-ledger/blob/main/CONTRIBUTING.md">Contributing</a>
+      <a href="https://github.com/phoenix1331/laravel-ai-headroom-ledger/blob/main/SECURITY.md">Security</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var format = new Intl.NumberFormat('en-GB');
+
+    // One illustrative request per scenario. Null means the figure was never reported.
+    var scenarios = {
+      completed: {
+        events: ['TokensCounted', 'TokensUsed'], outcome: 'completed', model: 'claude-sonnet-5-5',
+        estimated: 48200, actual: 49950, estimatedCost: 0.1600, actualCost: 0.1528, context: 24.1, reason: null,
+        tone: '', note: 'Counted before it was sent, answered, and priced from the usage the provider reported. Estimate and actual sit side by side, so accuracy is measured from your own traffic.'
+      },
+      warned: {
+        events: ['TokensCounted', 'HeadroomLow', 'TokensUsed'], outcome: 'warned', model: 'claude-sonnet-5-5',
+        estimated: 172800, actual: 175100, estimatedCost: 0.5338, actualCost: 0.5403, context: 86.4, reason: 'max_percent_of_context',
+        tone: 'warn', note: 'Past the 80% limit in report mode, so it was sent anyway. It stays marked as warned once its usage arrives: these are the requests creeping towards their limit.'
+      },
+      blocked: {
+        events: ['TokensCounted', 'RequestBlocked'], outcome: 'blocked', model: 'claude-sonnet-5-5',
+        estimated: 208400, actual: null, estimatedCost: 0.6406, actualCost: null, context: 104.2, reason: 'context_window',
+        tone: 'stop', note: 'Stopped before it was sent, so there is no usage and no actual cost. Queries report its estimate as an estimate, never as zero.'
+      },
+      failover: {
+        events: ['TokensCounted', 'RequestFailed', 'TokensUsed'], outcome: 'completed', model: 'claude-sonnet-5-5 → gpt-5',
+        estimated: 48200, actual: 46900, estimatedCost: 0.1600, actualCost: 0.0773, context: 24.1, reason: null,
+        tone: '', note: 'The first provider failed and another model answered. Usage proves the request was served, so it records as completed, against the model that actually ran. Accuracy leaves it out: a different tokeniser counted it.'
+      },
+      unreported: {
+        events: ['TokensCounted'], outcome: 'counted', model: 'claude-sonnet-5-5',
+        estimated: 48200, actual: null, estimatedCost: 0.1600, actualCost: null, context: 24.1, reason: null,
+        tone: 'warn', note: 'Counted but usage never arrived, as with an abandoned stream or Headroom::for() without recordUsage(). Spend falls back to the estimate and is flagged as estimated.'
+      }
+    };
+
+    var buttons = document.querySelectorAll('[data-scenario]');
+
+    function set(id, html) { document.getElementById(id).innerHTML = html; }
+    function nothing() { return '<span class="null">not reported</span>'; }
+    function money(value) { return '$' + value.toFixed(4); }
+
+    function bar(id, value, max) {
+      document.getElementById(id).style.width = value === null ? '0' : (value / max * 100) + '%';
+    }
+
+    function render(name) {
+      var s = scenarios[name];
+
+      buttons.forEach(function (button) {
+        button.setAttribute('aria-pressed', String(button.dataset.scenario === name));
+      });
+
+      document.querySelectorAll('[data-event]').forEach(function (item) {
+        item.classList.toggle('fired', s.events.indexOf(item.dataset.event) !== -1);
+      });
+
+      var outcome = document.getElementById('outcome');
+      outcome.className = 'chip ' + s.outcome;
+      outcome.textContent = s.outcome;
+
+      set('model', '<code>' + s.model + '</code>');
+
+      var maxTokens = Math.max(s.estimated, s.actual || 0);
+      bar('est-bar', s.estimated, maxTokens);
+      bar('act-bar', s.actual, maxTokens);
+      set('est-tokens', format.format(s.estimated));
+      set('act-tokens', s.actual === null ? nothing() : format.format(s.actual));
+
+      var maxCost = Math.max(s.estimatedCost, s.actualCost || 0);
+      bar('est-cost-bar', s.estimatedCost, maxCost);
+      bar('act-cost-bar', s.actualCost, maxCost);
+      set('est-cost', money(s.estimatedCost));
+      set('act-cost', s.actualCost === null ? nothing() : money(s.actualCost));
+
+      document.getElementById('ctx-bar').style.width = Math.min(s.context, 100) + '%';
+      document.getElementById('context').classList.toggle('over', s.context > 80);
+      set('ctx', s.context.toFixed(1) + '%');
+
+      set('reason', s.reason === null ? '<span class="null">null</span>' : '<code>' + s.reason + '</code>');
+
+      var note = document.getElementById('note');
+      note.className = 'row-note' + (s.tone ? ' ' + s.tone : '');
+      note.textContent = s.note;
+    }
+
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () { render(button.dataset.scenario); });
+    });
+
+    render('completed');
+
+    document.getElementById('copy-install').addEventListener('click', function (event) {
+      var button = event.currentTarget;
+      navigator.clipboard.writeText(document.getElementById('install-command').textContent).then(function () {
+        button.textContent = 'Copied';
+        setTimeout(function () { button.textContent = 'Copy'; }, 1500);
+      });
+    });
+  })();
+</script>
+</body>
+</html>

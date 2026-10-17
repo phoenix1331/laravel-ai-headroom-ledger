@@ -43,7 +43,8 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Phoenix1331\\AiHeadroomLedger\\Tests\\": "tests/"
+            "Phoenix1331\\AiHeadroomLedger\\Tests\\": "tests/",
+            "Workbench\\Database\\Seeders\\": "workbench/database/seeders/"
         }
     },
     "extra": {
