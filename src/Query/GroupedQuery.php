@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Phoenix1331\AiHeadroomLedger\Query;
 
 use Carbon\CarbonImmutable;
+use Closure;
+use Illuminate\Database\Eloquent\Builder;
 use Phoenix1331\AiHeadroomLedger\Data\Breakdown;
 use Phoenix1331\AiHeadroomLedger\Data\Group;
 use Phoenix1331\AiHeadroomLedger\Data\SpendSummary;
 use Phoenix1331\AiHeadroomLedger\Data\TokenTotals;
+use Phoenix1331\AiHeadroomLedger\Models\Entry;
 
 /**
  * A filtered ledger query grouped by model, provider, agent, day, run or tag.
@@ -18,8 +21,15 @@ use Phoenix1331\AiHeadroomLedger\Data\TokenTotals;
  */
 final readonly class GroupedQuery
 {
+    /**
+     * @internal Built by LedgerQuery's by*() methods.
+     *
+     * @param  Closure(): Builder<Entry>  $rows
+     * @param  array{0: string, 1: string}|null  $range  Inclusive "Y-m-d" days of the date filter.
+     */
     public function __construct(
-        private LedgerQuery $query,
+        private Closure $rows,
+        private ?array $range,
         private Grouping $grouping,
         private ?string $tagKey = null,
     ) {}
@@ -55,7 +65,7 @@ final readonly class GroupedQuery
     {
         $groups = [];
 
-        foreach (Aggregator::totals($this->query->rows(), $this->grouping, $this->tagKey) as $totals) {
+        foreach (Aggregator::totals(($this->rows)(), $this->grouping, $this->tagKey) as $totals) {
             /** @var TValue $value */
             $value = $totals[$part];
             $groups[$totals['key'] ?? ''] = new Group($totals['key'], $value);
@@ -73,15 +83,13 @@ final readonly class GroupedQuery
      */
     private function emptyDays(): array
     {
-        $range = $this->query->range();
-
-        if ($this->grouping !== Grouping::Day || $range === null) {
+        if ($this->grouping !== Grouping::Day || $this->range === null) {
             return [];
         }
 
         $days = [];
 
-        for ($day = CarbonImmutable::parse($range[0]); $day->toDateString() <= $range[1]; $day = $day->addDay()) {
+        for ($day = CarbonImmutable::parse($this->range[0]); $day->toDateString() <= $this->range[1]; $day = $day->addDay()) {
             $days[] = $day->toDateString();
         }
 

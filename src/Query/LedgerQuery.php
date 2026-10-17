@@ -182,7 +182,7 @@ final class LedgerQuery
      */
     public function byModel(): GroupedQuery
     {
-        return new GroupedQuery($this, Grouping::Model);
+        return $this->grouped(Grouping::Model);
     }
 
     /**
@@ -190,12 +190,12 @@ final class LedgerQuery
      */
     public function byProvider(): GroupedQuery
     {
-        return new GroupedQuery($this, Grouping::Provider);
+        return $this->grouped(Grouping::Provider);
     }
 
     public function byAgent(): GroupedQuery
     {
-        return new GroupedQuery($this, Grouping::Agent);
+        return $this->grouped(Grouping::Agent);
     }
 
     /**
@@ -203,7 +203,7 @@ final class LedgerQuery
      */
     public function byDay(): GroupedQuery
     {
-        return new GroupedQuery($this, Grouping::Day);
+        return $this->grouped(Grouping::Day);
     }
 
     /**
@@ -211,7 +211,7 @@ final class LedgerQuery
      */
     public function byRun(): GroupedQuery
     {
-        return new GroupedQuery($this, Grouping::Run);
+        return $this->grouped(Grouping::Run);
     }
 
     /**
@@ -219,29 +219,22 @@ final class LedgerQuery
      */
     public function byTag(string $key): GroupedQuery
     {
-        return new GroupedQuery($this, Grouping::Tag, $key);
+        return $this->grouped(Grouping::Tag, $key);
     }
 
-    /**
-     * The date range filter, as inclusive "Y-m-d" days.
-     *
-     * @internal
-     *
-     * @return array{0: string, 1: string}|null
-     */
-    public function range(): ?array
+    private function grouped(Grouping $grouping, ?string $tagKey = null): GroupedQuery
     {
-        return $this->from === null || $this->to === null ? null : [$this->from, $this->to];
+        $range = $this->from === null || $this->to === null ? null : [$this->from, $this->to];
+
+        return new GroupedQuery(fn (): Builder => $this->rows(), $range, $grouping, $tagKey);
     }
 
     /**
-     * The filtered raw entries. Aggregates build on this.
-     *
-     * @internal
+     * The filtered raw entries. Private, so no Eloquent builder reaches consumers.
      *
      * @return Builder<Entry>
      */
-    public function rows(): Builder
+    private function rows(): Builder
     {
         $entries = TableNames::entries();
 
