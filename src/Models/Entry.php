@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Phoenix1331\AiHeadroom\Enums\CountMethod;
 use Phoenix1331\AiHeadroomLedger\Database\Factories\LedgerEntryFactory;
 use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
+use Phoenix1331\AiHeadroomLedger\Support\Casts\DateOnly;
 use Phoenix1331\AiHeadroomLedger\Support\Casts\ReasonCode;
 use Phoenix1331\AiHeadroomLedger\Support\Casts\TokenBreakdown;
 use Phoenix1331\AiHeadroomLedger\Support\TableNames;
@@ -103,7 +104,7 @@ class Entry extends LedgerModel
             'streamed' => 'boolean',
             'outcome' => Outcome::class,
             'outcome_reason' => ReasonCode::class,
-            'occurred_on' => 'immutable_date',
+            'occurred_on' => DateOnly::class,
             'counted_at' => 'immutable_datetime',
             'used_at' => 'immutable_datetime',
         ];

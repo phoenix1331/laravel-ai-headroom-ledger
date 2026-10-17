@@ -13,6 +13,7 @@ use Phoenix1331\AiHeadroomLedger\Models\DailyRollup;
 use Phoenix1331\AiHeadroomLedger\Models\Entry;
 use Phoenix1331\AiHeadroomLedger\Models\Tag;
 use Phoenix1331\AiHeadroomLedger\Query\EntryMapper;
+use Phoenix1331\AiHeadroomLedger\Query\LedgerQuery;
 use Phoenix1331\AiHeadroomLedger\Support\TagValue;
 
 /**
@@ -20,6 +21,14 @@ use Phoenix1331\AiHeadroomLedger\Support\TagValue;
  */
 final class LedgerManager
 {
+    /**
+     * A new, unfiltered query over the ledger.
+     */
+    public function query(): LedgerQuery
+    {
+        return new LedgerQuery;
+    }
+
     /**
      * One request by its Headroom request ID, or null if it is not in the ledger.
      */

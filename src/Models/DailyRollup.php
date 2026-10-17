@@ -6,6 +6,7 @@ namespace Phoenix1331\AiHeadroomLedger\Models;
 
 use Carbon\CarbonImmutable;
 use Phoenix1331\AiHeadroom\Enums\CountMethod;
+use Phoenix1331\AiHeadroomLedger\Support\Casts\DateOnly;
 use Phoenix1331\AiHeadroomLedger\Support\TableNames;
 
 /**
@@ -60,7 +61,7 @@ class DailyRollup extends LedgerModel
     protected function casts(): array
     {
         return [
-            'date' => 'immutable_date',
+            'date' => DateOnly::class,
             'count_method' => CountMethod::class,
             'requests' => 'integer',
             'completed' => 'integer',
