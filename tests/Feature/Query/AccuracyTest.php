@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use Phoenix1331\AiHeadroom\Enums\CountMethod;
 use Phoenix1331\AiHeadroomLedger\Data\AccuracyStat;
 use Phoenix1331\AiHeadroomLedger\Data\AccuracyStats;
+use Phoenix1331\AiHeadroomLedger\Data\Breakdown;
 use Phoenix1331\AiHeadroomLedger\Database\Factories\LedgerEntryFactory;
 use Phoenix1331\AiHeadroomLedger\Facades\Ledger;
 
@@ -146,4 +147,62 @@ it('can be iterated and turned into an array', function (): void {
             'error_percent' => 10.0,
             'bias_percent' => 10.0,
         ]);
+});
+
+describe('grouped', function (): void {
+    it('measures accuracy per day, matching a query for that day alone', function (): void {
+        sample(900, 1_000, attributes: ['counted_at' => '2026-10-15 09:00:00', 'used_at' => '2026-10-15 09:00:05']);
+        sample(1_000, 1_000, method: CountMethod::Native, attributes: ['counted_at' => '2026-10-15 10:00:00', 'used_at' => '2026-10-15 10:00:05']);
+        sample(500, 400, model: 'gpt-5', attributes: ['counted_at' => '2026-10-17 09:00:00', 'used_at' => '2026-10-17 09:00:05']);
+
+        $byDay = Ledger::query()->lastDays(3)->byDay()->accuracy();
+
+        expect($byDay)->toBeInstanceOf(Breakdown::class)
+            ->and($byDay->keys())->toBe(['2026-10-15', '2026-10-16', '2026-10-17']);
+
+        foreach ($byDay->keys() as $day) {
+            $alone = Ledger::query()->between(CarbonImmutable::parse((string) $day), CarbonImmutable::parse((string) $day))->accuracy();
+
+            expect($byDay->get($day))->toBeInstanceOf(AccuracyStats::class)
+                ->and($byDay->get($day)?->toArray())->toBe($alone->toArray());
+        }
+
+        expect($byDay->get('2026-10-15'))->toHaveCount(2)
+            ->and($byDay->get('2026-10-16')?->isEmpty())->toBeTrue()
+            ->and($byDay->get('2026-10-17')?->for('gpt-5')?->biasPercent())->toBe(-25.0);
+    });
+
+    it('groups by model, agent, provider, tag and run', function (): void {
+        sample(900, 1_000, attributes: ['agent' => 'App\\Ai\\Agents\\SupportAgent', 'invocation_id' => 'run-1']);
+        sample(500, 400, model: 'gpt-5', attributes: ['agent' => 'App\\Ai\\Agents\\ResearchAgent', 'invocation_id' => 'run-2']);
+        LedgerEntryFactory::new()->forModel('gpt-5')->countMethod(CountMethod::Estimated)->withTags(['tenant_id' => 42])
+            ->create(['estimated_input_tokens' => 100, 'actual_input_tokens' => 110, 'invocation_id' => 'run-2', 'agent' => 'App\\Ai\\Agents\\ResearchAgent']);
+
+        $query = Ledger::query();
+
+        expect($query->byModel()->accuracy()->keys())->toBe(['claude-sonnet-5-5', 'gpt-5'])
+            ->and($query->byModel()->accuracy()->get('gpt-5')?->overall()->samples)->toBe(2)
+            ->and($query->byProvider()->accuracy()->get('anthropic')?->overall()->errorPercent())->toBe(10.0)
+            ->and($query->byAgent()->accuracy()->get('App\\Ai\\Agents\\SupportAgent')?->overall()->samples)->toBe(1)
+            ->and($query->byRun()->accuracy()->get('run-2')?->overall()->samples)->toBe(2)
+            ->and($query->byTag('tenant_id')->accuracy()->keys())->toBe(['42', null])
+            ->and($query->byTag('tenant_id')->accuracy()->get(null)?->overall()->samples)->toBe(2);
+    });
+
+    it('leaves out groups without samples unless they are days in the range', function (): void {
+        sample(900, 1_000, attributes: ['agent' => 'App\\Ai\\Agents\\SupportAgent', 'counted_at' => '2026-10-17 09:00:00', 'used_at' => '2026-10-17 09:00:05']);
+        LedgerEntryFactory::new()->forAgent('App\\Ai\\Agents\\ResearchAgent')->blocked()->at(CarbonImmutable::parse('2026-10-16 09:00'))->create();
+
+        expect(Ledger::query()->byAgent()->accuracy()->keys())->toBe(['App\\Ai\\Agents\\SupportAgent'])
+            ->and(Ledger::query()->byDay()->accuracy()->keys())->toBe(['2026-10-17']);
+    });
+
+    it('turns into an array of groups', function (): void {
+        sample(900, 1_000);
+
+        expect(Ledger::query()->byModel()->accuracy()->toArray())->toBe([[
+            'key' => 'claude-sonnet-5-5',
+            'value' => Ledger::query()->accuracy()->toArray(),
+        ]]);
+    });
 });

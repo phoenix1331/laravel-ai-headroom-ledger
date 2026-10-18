@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Phoenix1331\AiHeadroomLedger\Data\AccuracyStats;
 use Phoenix1331\AiHeadroomLedger\Data\Breakdown;
 use Phoenix1331\AiHeadroomLedger\Data\ContextUsage;
 use Phoenix1331\AiHeadroomLedger\Data\Group;
@@ -65,6 +66,24 @@ final readonly class GroupedQuery
     }
 
     /**
+     * Estimate accuracy per group, by counted model and count method. With
+     * byDay() and a date range, days without samples are included and empty.
+     *
+     * @return Breakdown<AccuracyStats>
+     */
+    public function accuracy(): Breakdown
+    {
+        $plan = ($this->plan)();
+        $groups = [];
+
+        foreach (Aggregator::accuracy(...$plan) as $index => $group) {
+            $groups[$index] = new Group($group['key'], $group['accuracy']);
+        }
+
+        return $this->withEmptyDays($groups, $plan[1], new AccuracyStats);
+    }
+
+    /**
      * @template TValue of SpendSummary|TokenTotals|ContextUsage
      *
      * @param  'spend'|'tokens'|'context'  $part
@@ -73,17 +92,28 @@ final readonly class GroupedQuery
      */
     private function breakdown(string $part, SpendSummary|TokenTotals|ContextUsage $empty): Breakdown
     {
+        $plan = ($this->plan)();
         $groups = [];
 
-        $plan = ($this->plan)();
-
-        foreach (Aggregator::totals(...$plan) as $totals) {
+        foreach (Aggregator::totals(...$plan) as $index => $totals) {
             /** @var TValue $value */
             $value = $totals[$part];
-            $groups[$totals['key'] ?? ''] = new Group($totals['key'], $value);
+            $groups[$index] = new Group($totals['key'], $value);
         }
 
-        foreach ($this->emptyDays($plan[1]) as $day) {
+        return $this->withEmptyDays($groups, $plan[1], $empty);
+    }
+
+    /**
+     * @template TValue of SpendSummary|TokenTotals|ContextUsage|AccuracyStats
+     *
+     * @param  array<string, Group<TValue>>  $groups  Keyed by group key ('' for null).
+     * @param  TValue  $empty
+     * @return Breakdown<TValue>
+     */
+    private function withEmptyDays(array $groups, ?Grouping $grouping, SpendSummary|TokenTotals|ContextUsage|AccuracyStats $empty): Breakdown
+    {
+        foreach ($this->emptyDays($grouping) as $day) {
             $groups[$day] ??= new Group($day, $empty);
         }
 

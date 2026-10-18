@@ -6,6 +6,7 @@ namespace Phoenix1331\AiHeadroomLedger\Data;
 
 use ArrayIterator;
 use Countable;
+use Illuminate\Contracts\Support\Arrayable;
 use IteratorAggregate;
 use Phoenix1331\AiHeadroom\Enums\CountMethod;
 use Traversable;
@@ -13,9 +14,10 @@ use Traversable;
 /**
  * Estimate accuracy per model and count method, ordered by model then method.
  *
+ * @implements Arrayable<int, array<string, mixed>>
  * @implements IteratorAggregate<int, AccuracyStat>
  */
-final readonly class AccuracyStats implements Countable, IteratorAggregate
+final readonly class AccuracyStats implements Arrayable, Countable, IteratorAggregate
 {
     /** @var list<AccuracyStat> */
     private array $stats;

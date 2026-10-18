@@ -266,9 +266,7 @@ final class LedgerQuery
      */
     public function accuracy(): AccuracyStats
     {
-        [$rows, , , $rollups] = $this->plan();
-
-        return Aggregator::accuracy($rows, $rollups);
+        return Aggregator::accuracy(...$this->plan())['']['accuracy'] ?? new AccuracyStats;
     }
 
     /**

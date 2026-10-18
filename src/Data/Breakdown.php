@@ -15,7 +15,7 @@ use Traversable;
  * Results grouped by model, agent, day, run or tag value, in natural key
  * order (days oldest first, tag 7 before tag 42), with the null group last.
  *
- * @template TValue of Arrayable<string, mixed>
+ * @template TValue of Arrayable<array-key, mixed>
  *
  * @implements IteratorAggregate<int, Group<TValue>>
  */

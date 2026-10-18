@@ -94,39 +94,14 @@ final class Aggregator
      */
     public static function totals(Builder $rows, ?Grouping $grouping = null, ?string $tagKey = null, ?QueryBuilder $rollups = null): array
     {
-        $query = $rows->toBase()->selectRaw(self::TOTALS)->addSelect('currency')->groupBy('currency');
-
-        match ($grouping) {
-            null => null,
-            Grouping::Model => $query->selectRaw('coalesce(model_used, model_counted) as group_key')->groupByRaw('coalesce(model_used, model_counted)'),
-            Grouping::Provider => $query->selectRaw('coalesce(provider_used, provider_counted) as group_key')->groupByRaw('coalesce(provider_used, provider_counted)'),
-            Grouping::Agent => $query->addSelect('agent as group_key')->groupBy('agent'),
-            Grouping::Day => $query->addSelect('occurred_on as group_key')->groupBy('occurred_on'),
-            Grouping::Run => $query->addSelect('invocation_id as group_key')->groupBy('invocation_id'),
-            Grouping::Tag => $query
-                ->leftJoin(TableNames::tags().' as '.self::TAG, fn (JoinClause $join) => $join
-                    ->on(self::TAG.'.request_id', '=', TableNames::entries().'.request_id')
-                    ->where(self::TAG.'.key', '=', $tagKey))
-                ->addSelect(self::TAG.'.value as group_key')
-                ->groupBy(self::TAG.'.value'),
-        };
-
-        $results = $query->get()->all();
+        $results = self::groupRows($rows->toBase()->selectRaw(self::TOTALS)->addSelect('currency')->groupBy('currency'), $grouping, $tagKey)
+            ->get()
+            ->all();
 
         if ($rollups !== null) {
-            $rollups->selectRaw(self::ROLLUP_TOTALS)->addSelect('currency')->groupBy('currency');
-
-            match ($grouping) {
-                null => null,
-                Grouping::Model => $rollups->addSelect('model as group_key')->groupBy('model'),
-                Grouping::Provider => $rollups->addSelect('provider as group_key')->groupBy('provider'),
-                Grouping::Agent => $rollups->addSelect('agent as group_key')->groupBy('agent'),
-                Grouping::Day => $rollups->addSelect('date as group_key')->groupBy('date'),
-                Grouping::Tag => $rollups->addSelect('primary_tag_value as group_key')->groupBy('primary_tag_value'),
-                Grouping::Run => throw new LogicException('Runs cannot be read from daily rollups.'),
-            };
-
-            array_push($results, ...$rollups->get()->all());
+            array_push($results, ...self::groupRollups($rollups->selectRaw(self::ROLLUP_TOTALS)->addSelect('currency')->groupBy('currency'), $grouping)
+                ->get()
+                ->all());
         }
 
         $groups = [];
@@ -142,38 +117,38 @@ final class Aggregator
     }
 
     /**
-     * Estimate against actual input tokens, per counted model and count method,
-     * for requests that reported usage from the model that was counted.
+     * Estimate against actual input tokens, per group, counted model and count
+     * method, for requests that reported usage from the model that was counted.
      *
      * @param  Builder<Entry>  $rows
      * @param  QueryBuilder|null  $rollups  Filtered daily rollup rows covering the days $rows leaves out.
+     * @return array<string, array{key: string|null, accuracy: AccuracyStats}> Keyed by group key ('' for null).
      */
-    public static function accuracy(Builder $rows, ?QueryBuilder $rollups = null): AccuracyStats
+    public static function accuracy(Builder $rows, ?Grouping $grouping = null, ?string $tagKey = null, ?QueryBuilder $rollups = null): array
     {
-        $results = $rows->toBase()
+        $query = $rows->toBase()
             ->selectRaw(self::ACCURACY)
             ->whereNotNull('estimated_input_tokens')
             ->whereNotNull('actual_input_tokens')
             ->whereNotNull('model_counted')
             ->whereColumn('model_used', 'model_counted')
-            ->groupBy('model_counted', 'count_method')
-            ->get()
-            ->all();
+            ->groupBy('model_counted', 'count_method');
+
+        $results = self::groupRows($query, $grouping, $tagKey)->get()->all();
 
         if ($rollups !== null) {
-            array_push($results, ...$rollups
-                ->selectRaw(self::ROLLUP_ACCURACY)
-                ->where('accuracy_samples', '>', 0)
-                ->groupBy('model', 'count_method')
-                ->get()
-                ->all());
+            $rollups->selectRaw(self::ROLLUP_ACCURACY)->where('accuracy_samples', '>', 0)->groupBy('model', 'count_method');
+
+            array_push($results, ...self::groupRollups($rollups, $grouping)->get()->all());
         }
 
+        $keys = [];
         $stats = [];
 
         foreach ($results as $row) {
             /** @var array<string, mixed> $row */
             $row = (array) $row;
+            $key = $grouping === null ? null : self::key($row['group_key'] ?? null, $grouping);
             $method = $row['count_method'] ?? null;
 
             $stat = new AccuracyStat(
@@ -184,11 +159,59 @@ final class Aggregator
                 self::int($row, 'actual_tokens'),
                 self::int($row, 'absolute_error'),
             );
-            $key = $stat->model.'|'.$stat->countMethod?->value;
-            $stats[$key] = isset($stats[$key]) ? $stats[$key]->plus($stat) : $stat;
+            $statKey = $stat->model.'|'.$stat->countMethod?->value;
+            $keys[$key ?? ''] = $key;
+            $stats[$key ?? ''][$statKey] = isset($stats[$key ?? ''][$statKey]) ? $stats[$key ?? ''][$statKey]->plus($stat) : $stat;
         }
 
-        return new AccuracyStats(array_values($stats));
+        $groups = [];
+
+        foreach ($stats as $index => $group) {
+            $groups[$index] = ['key' => $keys[$index], 'accuracy' => new AccuracyStats(array_values($group))];
+        }
+
+        return $groups;
+    }
+
+    /**
+     * Group raw entries as the grouping asks, adding the group_key column.
+     */
+    private static function groupRows(QueryBuilder $query, ?Grouping $grouping, ?string $tagKey): QueryBuilder
+    {
+        match ($grouping) {
+            null => null,
+            Grouping::Model => $query->selectRaw('coalesce(model_used, model_counted) as group_key')->groupByRaw('coalesce(model_used, model_counted)'),
+            Grouping::Provider => $query->selectRaw('coalesce(provider_used, provider_counted) as group_key')->groupByRaw('coalesce(provider_used, provider_counted)'),
+            Grouping::Agent => $query->addSelect('agent as group_key')->groupBy('agent'),
+            Grouping::Day => $query->addSelect('occurred_on as group_key')->groupBy('occurred_on'),
+            Grouping::Run => $query->addSelect('invocation_id as group_key')->groupBy('invocation_id'),
+            Grouping::Tag => $query
+                ->leftJoin(TableNames::tags().' as '.self::TAG, fn (JoinClause $join) => $join
+                    ->on(self::TAG.'.request_id', '=', TableNames::entries().'.request_id')
+                    ->where(self::TAG.'.key', '=', $tagKey))
+                ->addSelect(self::TAG.'.value as group_key')
+                ->groupBy(self::TAG.'.value'),
+        };
+
+        return $query;
+    }
+
+    /**
+     * Group daily rollup rows the same way; their columns already hold the answered-else-counted values.
+     */
+    private static function groupRollups(QueryBuilder $rollups, ?Grouping $grouping): QueryBuilder
+    {
+        match ($grouping) {
+            null => null,
+            Grouping::Model => $rollups->addSelect('model as group_key')->groupBy('model'),
+            Grouping::Provider => $rollups->addSelect('provider as group_key')->groupBy('provider'),
+            Grouping::Agent => $rollups->addSelect('agent as group_key')->groupBy('agent'),
+            Grouping::Day => $rollups->addSelect('date as group_key')->groupBy('date'),
+            Grouping::Tag => $rollups->addSelect('primary_tag_value as group_key')->groupBy('primary_tag_value'),
+            Grouping::Run => throw new LogicException('Runs cannot be read from daily rollups.'),
+        };
+
+        return $rollups;
     }
 
     /**
