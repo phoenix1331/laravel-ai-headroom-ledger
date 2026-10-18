@@ -9,6 +9,7 @@ use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use InvalidArgumentException;
+use Phoenix1331\AiHeadroom\Enums\CountMethod;
 use Phoenix1331\AiHeadroomLedger\Data\AccuracyStats;
 use Phoenix1331\AiHeadroomLedger\Data\ContextUsage;
 use Phoenix1331\AiHeadroomLedger\Data\LedgerEntries;
@@ -48,6 +49,9 @@ final class LedgerQuery
 
     /** @var list<Outcome> */
     private array $outcomes = [];
+
+    /** @var list<CountMethod> */
+    private array $countMethods = [];
 
     private EntrySort $sort = EntrySort::CountedAt;
 
@@ -104,6 +108,15 @@ final class LedgerQuery
     public function forModel(string $model): self
     {
         return $this->with(fn (self $query) => $query->model = $model);
+    }
+
+    /**
+     * Requests counted with any of these methods. Requests with no recorded
+     * method (a warning or failure alone) never match.
+     */
+    public function forCountMethod(CountMethod ...$methods): self
+    {
+        return $this->with(fn (self $query) => $query->countMethods = array_values(array_unique($methods, SORT_REGULAR)));
     }
 
     /**
@@ -327,6 +340,7 @@ final class LedgerQuery
             ->when($this->agent !== null, fn (QueryBuilder $query) => $query->where('agent', $this->agent))
             ->when($this->provider !== null, fn (QueryBuilder $query) => $query->where('provider', $this->provider))
             ->when($this->model !== null, fn (QueryBuilder $query) => $query->where('model', $this->model))
+            ->when($this->countMethods !== [], fn (QueryBuilder $query) => $query->whereIn('count_method', $this->countMethods))
             ->tap(function (QueryBuilder $query): void {
                 foreach ($this->tags as $key => $value) {
                     $query->where('primary_tag_key', $key)->where('primary_tag_value', $value);
@@ -348,6 +362,7 @@ final class LedgerQuery
             ->when($this->agent !== null, fn (Builder $query) => $query->where('agent', $this->agent))
             ->when($this->provider !== null, fn (Builder $query) => self::usedElseCounted($query, 'provider', (string) $this->provider))
             ->when($this->model !== null, fn (Builder $query) => self::usedElseCounted($query, 'model', (string) $this->model))
+            ->when($this->countMethods !== [], fn (Builder $query) => $query->whereIn('count_method', $this->countMethods))
             ->when($this->minPercent !== null, fn (Builder $query) => $query->where('percent_used', '>=', $this->minPercent))
             ->when($this->outcomes !== [], fn (Builder $query) => $query->whereIn('outcome', $this->outcomes))
             ->tap(function (Builder $query) use ($entries): void {

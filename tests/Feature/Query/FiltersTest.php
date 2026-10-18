@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Phoenix1331\AiHeadroom\Enums\CountMethod;
 use Phoenix1331\AiHeadroomLedger\Data\LedgerEntries;
 use Phoenix1331\AiHeadroomLedger\Data\LedgerEntry;
 use Phoenix1331\AiHeadroomLedger\Database\Factories\LedgerEntryFactory;
@@ -126,6 +127,18 @@ it('filters by one or several tags', function (): void {
     expect(ids(Ledger::query()->forTag('tenant_id', 42)->entries()))->toEqualCanonicalizing(['pro-42', 'free-42'])
         ->and(ids(Ledger::query()->forTag('tenant_id', '42')->forTag('plan', 'pro')->entries()))->toBe(['pro-42'])
         ->and(Ledger::query()->forTag('tenant_id', 99)->count())->toBe(0);
+});
+
+it('filters by one or several count methods', function (): void {
+    LedgerEntryFactory::new()->countMethod(CountMethod::Native)->create(['request_id' => 'native']);
+    LedgerEntryFactory::new()->countMethod(CountMethod::Calibrated)->create(['request_id' => 'calibrated']);
+    LedgerEntryFactory::new()->countMethod(CountMethod::Estimated)->create(['request_id' => 'estimated']);
+    event(headroomLow(['requestId' => 'warning-only']));
+
+    expect(ids(Ledger::query()->forCountMethod(CountMethod::Native)->entries()))->toBe(['native'])
+        ->and(ids(Ledger::query()->forCountMethod(CountMethod::Native, CountMethod::Calibrated, CountMethod::Native)->entries()))->toEqualCanonicalizing(['native', 'calibrated'])
+        ->and(Ledger::query()->forCountMethod(CountMethod::Estimated)->count())->toBe(1)
+        ->and(Ledger::query()->forCountMethod()->count())->toBe(4);
 });
 
 it('finds requests near their context limit', function (): void {

@@ -96,6 +96,11 @@ function aggregates(): array
         'primary tag filter' => fn () => Ledger::query()->forTag('tenant_id', 42)->byModel()->tokens()->toArray(),
         'agent filter' => fn () => Ledger::query()->forAgent('App\\Ai\\Agents\\SupportAgent')->spend()->toArray(),
         'model filter' => fn () => Ledger::query()->forModel('gpt-5')->accuracy()->toArray(),
+        'count method entries' => fn () => Ledger::query()->forCountMethod(CountMethod::Native)->count(),
+        'count method spend' => fn () => Ledger::query()->forCountMethod(CountMethod::Native)->spend()->toArray(),
+        'count methods tokens' => fn () => Ledger::query()->forCountMethod(CountMethod::Estimated, CountMethod::Calibrated)->tokens()->toArray(),
+        'count method accuracy' => fn () => Ledger::query()->forCountMethod(CountMethod::Native)->accuracy()->toArray(),
+        'count method by day' => fn () => Ledger::query()->lastDays(10)->forCountMethod(CountMethod::Native)->byDay()->spend()->toArray(),
         'provider filter' => fn () => Ledger::query()->forProvider('openai')->byDay()->tokens()->toArray(),
         'near limit (raw only)' => fn () => Ledger::query()->nearLimit(50)->spend()->toArray(),
         'blocked (raw only)' => fn () => Ledger::query()->blocked()->byModel()->spend()->toArray(),
@@ -132,6 +137,17 @@ it('reads rolled-up days from rollups, so pruned entries still count', function 
 
     expect(spendOf(Ledger::query()))->toBe($before)
         ->and(rawOnly(fn () => spendOf(Ledger::query())))->toBeLessThan($before);
+});
+
+it('answers a count method filter from rollups', function (): void {
+    LedgerEntryFactory::new()->at(CarbonImmutable::parse('2026-10-15 10:00'))->countMethod(CountMethod::Native)->create(['actual_cost' => 100]);
+    LedgerEntryFactory::new()->at(CarbonImmutable::parse('2026-10-15 10:00'))->countMethod(CountMethod::Estimated)->create(['actual_cost' => 200]);
+    rollUpDays('2026-10-15');
+
+    forgetEntriesOn('2026-10-15');
+
+    expect(spendOf(Ledger::query()->forCountMethod(CountMethod::Native)))->toBe(100)
+        ->and(spendOf(Ledger::query()->forCountMethod(CountMethod::Native, CountMethod::Estimated)))->toBe(300);
 });
 
 it('reads days that were not rolled up from raw entries', function (): void {
