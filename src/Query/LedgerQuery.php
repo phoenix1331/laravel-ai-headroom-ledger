@@ -14,6 +14,7 @@ use Phoenix1331\AiHeadroomLedger\Data\ContextUsage;
 use Phoenix1331\AiHeadroomLedger\Data\LedgerEntries;
 use Phoenix1331\AiHeadroomLedger\Data\SpendSummary;
 use Phoenix1331\AiHeadroomLedger\Data\TokenTotals;
+use Phoenix1331\AiHeadroomLedger\Enums\EntrySort;
 use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
 use Phoenix1331\AiHeadroomLedger\Models\DailyRollup;
 use Phoenix1331\AiHeadroomLedger\Models\Entry;
@@ -46,6 +47,10 @@ final class LedgerQuery
 
     /** @var list<Outcome> */
     private array $outcomes = [];
+
+    private EntrySort $sort = EntrySort::CountedAt;
+
+    private bool $descending = true;
 
     /**
      * Requests counted on any day from $from to $to, inclusive.
@@ -132,14 +137,24 @@ final class LedgerQuery
     }
 
     /**
-     * Matching requests, newest first.
+     * The order entries() returns requests in; newest first by default.
+     * Requests without the figure sort last either way, and ties fall back
+     * to the request ID, so pages never overlap.
+     */
+    public function orderBy(EntrySort $sort, bool $descending = true): self
+    {
+        return $this->with(function (self $query) use ($sort, $descending): void {
+            $query->sort = $sort;
+            $query->descending = $descending;
+        });
+    }
+
+    /**
+     * Matching requests, newest first unless orderBy() says otherwise.
      */
     public function entries(?int $limit = null): LedgerEntries
     {
-        $rows = $this->rows()
-            ->with('tags')
-            ->orderByRaw('coalesce(counted_at, used_at) desc')
-            ->orderByDesc('request_id')
+        $rows = $this->sorted($this->rows()->with('tags'))
             ->when($limit !== null, fn (Builder $query) => $query->limit((int) $limit))
             ->get();
 
@@ -328,6 +343,30 @@ final class LedgerQuery
                         ->where('value', $value));
                 }
             });
+    }
+
+    /**
+     * Nulls last on every database (PostgreSQL puts them first on desc by
+     * default), then the request ID so the order is total.
+     *
+     * @param  Builder<Entry>  $query
+     * @return Builder<Entry>
+     */
+    private function sorted(Builder $query): Builder
+    {
+        $column = match ($this->sort) {
+            EntrySort::CountedAt => 'coalesce(counted_at, used_at)',
+            EntrySort::PercentUsed => 'percent_used',
+            EntrySort::Cost => 'coalesce(actual_cost, estimated_cost)',
+            EntrySort::InputTokens => 'coalesce(actual_input_tokens, estimated_input_tokens)',
+            EntrySort::OutputTokens => 'output_tokens',
+        };
+        $direction = $this->descending ? 'desc' : 'asc';
+
+        return $query
+            ->orderByRaw("case when {$column} is null then 1 else 0 end")
+            ->orderByRaw("{$column} {$direction}")
+            ->orderBy('request_id', $direction);
     }
 
     /**
