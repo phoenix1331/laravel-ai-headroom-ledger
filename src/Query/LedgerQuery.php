@@ -12,6 +12,7 @@ use InvalidArgumentException;
 use Phoenix1331\AiHeadroomLedger\Data\AccuracyStats;
 use Phoenix1331\AiHeadroomLedger\Data\ContextUsage;
 use Phoenix1331\AiHeadroomLedger\Data\LedgerEntries;
+use Phoenix1331\AiHeadroomLedger\Data\LedgerPage;
 use Phoenix1331\AiHeadroomLedger\Data\SpendSummary;
 use Phoenix1331\AiHeadroomLedger\Data\TokenTotals;
 use Phoenix1331\AiHeadroomLedger\Enums\EntrySort;
@@ -159,6 +160,21 @@ final class LedgerQuery
             ->get();
 
         return new LedgerEntries($rows->map(EntryMapper::toEntry(...)));
+    }
+
+    /**
+     * One page of matching requests, in the entries() order, with the total
+     * across every page. A page past the end is empty.
+     */
+    public function paginate(int $perPage = 25, int $page = 1): LedgerPage
+    {
+        if ($perPage < 1 || $page < 1) {
+            throw new InvalidArgumentException('paginate() needs at least one entry per page and a page number of at least 1.');
+        }
+
+        $rows = $this->sorted($this->rows()->with('tags'))->forPage($page, $perPage)->get();
+
+        return new LedgerPage(new LedgerEntries($rows->map(EntryMapper::toEntry(...))), $this->count(), $page, $perPage);
     }
 
     public function count(): int
