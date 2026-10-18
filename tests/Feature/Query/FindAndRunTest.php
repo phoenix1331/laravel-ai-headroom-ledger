@@ -9,6 +9,7 @@ use Phoenix1331\AiHeadroomLedger\Data\RunSummary;
 use Phoenix1331\AiHeadroomLedger\Database\Factories\LedgerEntryFactory;
 use Phoenix1331\AiHeadroomLedger\Enums\Outcome;
 use Phoenix1331\AiHeadroomLedger\Facades\Ledger;
+use Phoenix1331\AiHeadroomLedger\Models\Entry;
 
 describe('find', function (): void {
     it('returns null for an unknown request', function (): void {
@@ -143,5 +144,55 @@ describe('run', function (): void {
             ->startedAt->toBeNull()
             ->endedAt->toBeNull()
             ->spend->isEmpty()->toBeTrue();
+    });
+});
+
+describe('scoped to a query', function (): void {
+    beforeEach(function (): void {
+        CarbonImmutable::setTestNow('2026-10-17 12:00:00');
+
+        LedgerEntryFactory::new()->count(2)->inRun('run-42', 'App\\Ai\\Agents\\SupportAgent')->withTags(['tenant_id' => 42])->create();
+        LedgerEntryFactory::new()->count(2)->inRun('run-7', 'App\\Ai\\Agents\\SupportAgent')->withTags(['tenant_id' => 7])->create();
+    });
+
+    it('finds a request only when it matches the filters', function (): void {
+        $mine = Entry::query()->where('invocation_id', 'run-42')->value('request_id');
+        $theirs = Entry::query()->where('invocation_id', 'run-7')->value('request_id');
+        $tenant = Ledger::query()->forTag('tenant_id', 42);
+
+        expect($tenant->find((string) $mine)?->requestId)->toBe($mine)
+            ->and($tenant->find((string) $mine)?->tags)->toBe(['tenant_id' => '42'])
+            ->and($tenant->find((string) $theirs))->toBeNull()
+            ->and($tenant->find('missing'))->toBeNull()
+            ->and(Ledger::find((string) $theirs)?->requestId)->toBe($theirs);
+    });
+
+    it('returns a run only when its steps match the filters', function (): void {
+        $tenant = Ledger::query()->forTag('tenant_id', 42);
+
+        expect($tenant->run('run-42')?->stepCount())->toBe(2)
+            ->and($tenant->run('run-7'))->toBeNull()
+            ->and(Ledger::run('run-7')?->stepCount())->toBe(2)
+            ->and($tenant->run('run-42'))->toEqual(Ledger::run('run-42'));
+    });
+
+    it('applies every filter, not only tags', function (): void {
+        $id = (string) Entry::query()->where('invocation_id', 'run-42')->value('request_id');
+
+        expect(Ledger::query()->forAgent('App\\Ai\\Agents\\ResearchAgent')->find($id))->toBeNull()
+            ->and(Ledger::query()->forAgent('App\\Ai\\Agents\\ResearchAgent')->run('run-42'))->toBeNull()
+            ->and(Ledger::query()->forModel('no-such-model')->find($id))->toBeNull()
+            ->and(Ledger::query()->withOutcome(Outcome::Blocked)->run('run-42'))->toBeNull()
+            ->and(Ledger::query()->between(CarbonImmutable::parse('2020-01-01'), CarbonImmutable::parse('2020-01-02'))->find($id))->toBeNull();
+    });
+
+    it('keeps only the steps inside a date range', function (): void {
+        LedgerEntryFactory::new()->inRun('overnight')->at(CarbonImmutable::parse('2026-10-16 23:59'))->create(['request_id' => 'before-midnight']);
+        LedgerEntryFactory::new()->inRun('overnight')->at(CarbonImmutable::parse('2026-10-17 00:01'))->create(['request_id' => 'after-midnight']);
+
+        $steps = Ledger::query()->lastDays(1)->run('overnight')?->steps->all() ?? [];
+
+        expect(array_map(fn (LedgerEntry $e): string => $e->requestId, $steps))->toBe(['after-midnight'])
+            ->and(Ledger::run('overnight')?->stepCount())->toBe(2);
     });
 });

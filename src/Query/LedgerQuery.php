@@ -13,7 +13,9 @@ use Phoenix1331\AiHeadroom\Enums\CountMethod;
 use Phoenix1331\AiHeadroomLedger\Data\AccuracyStats;
 use Phoenix1331\AiHeadroomLedger\Data\ContextUsage;
 use Phoenix1331\AiHeadroomLedger\Data\LedgerEntries;
+use Phoenix1331\AiHeadroomLedger\Data\LedgerEntry;
 use Phoenix1331\AiHeadroomLedger\Data\LedgerPage;
+use Phoenix1331\AiHeadroomLedger\Data\RunSummary;
 use Phoenix1331\AiHeadroomLedger\Data\SpendSummary;
 use Phoenix1331\AiHeadroomLedger\Data\TokenTotals;
 use Phoenix1331\AiHeadroomLedger\Enums\EntrySort;
@@ -188,6 +190,42 @@ final class LedgerQuery
         $rows = $this->sorted($this->rows()->with('tags'))->forPage($page, $perPage)->get();
 
         return new LedgerPage(new LedgerEntries($rows->map(EntryMapper::toEntry(...))), $this->count(), $page, $perPage);
+    }
+
+    /**
+     * One request by its Headroom request ID, or null if it is not in the
+     * ledger or does not match every filter. Use this rather than
+     * Ledger::find() to keep one tenant from reading another's request:
+     *
+     *     Ledger::query()->forTag('tenant_id', $tenant->id)->find($requestId);
+     */
+    public function find(string $requestId): ?LedgerEntry
+    {
+        $row = $this->rows()->with('tags')->find($requestId);
+
+        return $row === null ? null : EntryMapper::toEntry($row);
+    }
+
+    /**
+     * The steps of one agent run that match every filter, in order, with
+     * totals; null if none match. A date filter keeps only the steps inside
+     * the range, so a run that crosses midnight at the range edge comes back
+     * partial.
+     */
+    public function run(string $invocationId): ?RunSummary
+    {
+        $rows = $this->rows()
+            ->with('tags')
+            ->where('invocation_id', $invocationId)
+            ->orderByRaw('coalesce(counted_at, used_at)')
+            ->orderBy('request_id')
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return null;
+        }
+
+        return RunSummary::of($invocationId, new LedgerEntries($rows->map(EntryMapper::toEntry(...))));
     }
 
     public function count(): int
