@@ -121,6 +121,8 @@ Tags are configured in the published `config/headroom-ledger.php`, not the envir
 The query API is the only supported way to read the ledger, so the schema can change without breaking anything built on it. Every result is a final, readonly value object; no Eloquent model leaves the package.
 
 ```php
+use Phoenix1331\AiHeadroom\Enums\CountMethod;
+use Phoenix1331\AiHeadroomLedger\Enums\EntrySort;
 use Phoenix1331\AiHeadroomLedger\Facades\Ledger;
 
 $query = Ledger::query()
@@ -129,10 +131,15 @@ $query = Ledger::query()
     ->forModel('claude-sonnet-5-5')        // the model that answered, else the one counted
     ->forProvider('anthropic')
     ->forTag('tenant_id', 42)              // repeat for several tags
+    ->forCountMethod(CountMethod::Native)  // one or several Headroom count methods
     ->nearLimit(80)                        // estimate used at least 80% of the context window
     ->blocked();                           // blocked or warned; blocked(includeWarned: false) for blocked only
 
-$query->entries(50);   // LedgerEntries, newest first
+$query->entries(50);                       // LedgerEntries, newest first
+$query->orderBy(EntrySort::Cost)->entries(10);              // most expensive first; descending: false for cheapest
+$query->paginate(perPage: 25, page: 2);    // LedgerPage: entries, total, page, perPage, lastPage(), hasMorePages()
+$query->find($requestId);                  // one LedgerEntry matching every filter, or null
+$query->run($invocationId);                // RunSummary of the steps matching every filter, or null
 $query->count();
 $query->spend();       // SpendSummary
 $query->tokens();      // TokenTotals
@@ -142,10 +149,13 @@ $query->accuracy();    // AccuracyStats per model and count method
 Ledger::query()->lastDays(7)->byDay()->spend();     // Breakdown<SpendSummary>, every day of the range
 Ledger::query()->lastDays(7)->byModel()->tokens();  // also byProvider(), byAgent(), byRun(), byTag('tenant_id')
 Ledger::query()->lastDays(7)->byAgent()->context();
+Ledger::query()->lastDays(30)->byDay()->accuracy();  // Breakdown<AccuracyStats>: estimate accuracy over time
 
-Ledger::find($requestId);    // one LedgerEntry, or null
-Ledger::run($invocationId);  // RunSummary: every step of one agent run, with totals
+Ledger::find($requestId);    // one LedgerEntry, or null; unscoped, see Tags and privacy
+Ledger::run($invocationId);  // RunSummary: every step of one agent run, with totals; unscoped
 ```
+
+**Sorting and paging.** `orderBy()` takes an `EntrySort`: `CountedAt` (the default, newest first), `PercentUsed`, `Cost` (actual, else the estimate), `InputTokens` (reported, else the estimate) or `OutputTokens`. Requests without the figure sort last in either direction, on every database, and ties fall back to the request ID, so consecutive pages never overlap or skip a row. Cost sorts by the stored amount, so a ledger with several currencies is not converted first. `paginate()` follows the same order and filters; a page past the end is empty but still carries the total. `LedgerPage` is a plain value object, so wrap it in your framework's paginator if you want page links.
 
 **Spend is honest.** `spend()` returns a `SpendSummary` with three parts, each grouped by currency:
 
@@ -226,6 +236,15 @@ Ledger::forgetTag('user_id', 123);   // returns how many entries carried the tag
 
 This deletes the tag from every entry, gives that person's agent runs new random invocation IDs so they no longer match your own logs, and clears it from the rollups. Token counts and costs stay, so totals remain correct. Run it once the ledger queue has drained.
 
+**Multi-tenant apps: scope lookups by ID.** `Ledger::find()` and `Ledger::run()` return any request or run, whichever tenant it belongs to, so an ID taken from a URL could show another tenant's data. Look them up through a filtered query instead; it returns null unless the request matches every filter:
+
+```php
+Ledger::query()->forTag('tenant_id', $tenant->id)->find($requestId);
+Ledger::query()->forTag('tenant_id', $tenant->id)->run($invocationId);
+```
+
+A date filter applies too, so a run that crosses the edge of the range comes back with only the steps inside it.
+
 ### Events
 
 | Event | When |
@@ -265,8 +284,8 @@ The query API is all a dashboard needs. This one is a plain Livewire page, teste
 | 3 Reported spend per day | `byDay()->spend()` |
 | 4 Breakdown | `byModel()`, `byProvider()`, `byAgent()` or `byTag($key)`, then `spend()`, `tokens()`, `context()` |
 | 5 Estimate accuracy | `accuracy()`, per model and count method |
-| 6 Stopped or warned | `blocked()->entries(8)` |
-| 7 Recent requests | `entries(25)`; selecting a row opens `Ledger::run($invocationId)` |
+| 6 Stopped or warned | `blocked()->orderBy(EntrySort::PercentUsed)->entries(8)`, closest to the limit first |
+| 7 Recent requests | `orderBy(...)->paginate(10, $page)` with sortable columns; selecting a row opens `$query->run($invocationId)`, scoped to the filter |
 
 The whole page is in [`examples/livewire-dashboard`](examples/livewire-dashboard) (Livewire 3 or 4 and Tailwind v4) to copy into your app. It is not part of the package. [Filament Headroom](https://github.com/phoenix1331/filament-headroom) will package a dashboard for Filament panels.
 

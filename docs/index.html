@@ -338,7 +338,9 @@ php artisan migrate</pre>
         <h2>A query API that returns values, not models</h2>
         <p>The query API is the only supported way to read the ledger, so the schema can change without breaking anything built on it. Results are typed, readonly value objects; no Eloquent model leaves the package.</p>
       </div>
-<pre><span class="k">use</span> Phoenix1331\AiHeadroomLedger\Facades\Ledger;
+<pre><span class="k">use</span> Phoenix1331\AiHeadroom\Enums\CountMethod;
+<span class="k">use</span> Phoenix1331\AiHeadroomLedger\Enums\EntrySort;
+<span class="k">use</span> Phoenix1331\AiHeadroomLedger\Facades\Ledger;
 
 Ledger::query()
     ->between(now()->subDays(<span class="s">30</span>), now())
@@ -349,10 +351,15 @@ Ledger::query()
 Ledger::query()->lastDays(<span class="s">7</span>)->byModel()->tokens();      <span class="c">// input, output, cached per model</span>
 Ledger::query()->lastDays(<span class="s">7</span>)->byDay()->spend();         <span class="c">// every day, ready to chart</span>
 Ledger::query()->lastDays(<span class="s">30</span>)->accuracy();              <span class="c">// estimate error per model and count method</span>
+Ledger::query()->lastDays(<span class="s">30</span>)->byDay()->accuracy();     <span class="c">// estimate error over time</span>
+Ledger::query()->forCountMethod(CountMethod::Native)->accuracy(); <span class="c">// one counting method only</span>
 Ledger::query()->lastDays(<span class="s">7</span>)->nearLimit(<span class="s">80</span>)->entries(); <span class="c">// requests at or above 80% of context</span>
 Ledger::query()->lastDays(<span class="s">7</span>)->blocked()->entries();     <span class="c">// blocked or warned</span>
 Ledger::query()->lastDays(<span class="s">7</span>)->byRun()->spend();         <span class="c">// per agent run, not per call</span>
-Ledger::find($requestId);                                <span class="c">// one LedgerEntry</span>
+Ledger::query()->orderBy(EntrySort::Cost)->paginate(<span class="s">25</span>, $page); <span class="c">// LedgerPage, most expensive first</span>
+Ledger::query()->forTag(<span class="s">'tenant_id'</span>, $id)->find($requestId);  <span class="c">// null unless it is this tenant's</span>
+Ledger::query()->forTag(<span class="s">'tenant_id'</span>, $id)->run($invocationId); <span class="c">// this tenant's steps of a run</span>
+Ledger::find($requestId);                                <span class="c">// one LedgerEntry, any tenant</span>
 Ledger::run($invocationId);                              <span class="c">// every step of an agent run, with totals</span></pre>
       <div class="measure">
         <p>Honest by design. A request that never reported usage has an estimate but no actual figures; it is never counted as zero. <code>spend()</code> keeps the reported and estimate-only parts separate, every amount carries its currency and whether it is an estimate, and different currencies are never added together. Money is held as integer millionths, so a request that cost a fraction of a cent still shows up.</p>
@@ -377,8 +384,8 @@ Ledger::run($invocationId);                              <span class="c">// ever
             <tr><td>3 Reported spend per day</td><td><code>byDay()->spend()</code></td></tr>
             <tr><td>4 Breakdown</td><td><code>byModel()</code>, <code>byProvider()</code>, <code>byAgent()</code> or <code>byTag($key)</code>, then <code>spend()</code>, <code>tokens()</code>, <code>context()</code></td></tr>
             <tr><td>5 Estimate accuracy</td><td><code>accuracy()</code>, per model and count method</td></tr>
-            <tr><td>6 Stopped or warned</td><td><code>blocked()->entries(8)</code></td></tr>
-            <tr><td>7 Recent requests</td><td><code>entries(25)</code>; a row opens <code>Ledger::run($invocationId)</code></td></tr>
+            <tr><td>6 Stopped or warned</td><td><code>blocked()->orderBy(EntrySort::PercentUsed)->entries(8)</code>, closest to the limit first</td></tr>
+            <tr><td>7 Recent requests</td><td><code>orderBy(...)->paginate(10, $page)</code> with sortable columns; a row opens <code>$query->run($invocationId)</code>, scoped to the filter</td></tr>
           </tbody>
         </table>
       </div>
@@ -433,6 +440,7 @@ Schedule::command(<span class="s">'headroom-ledger:prune'</span>)->daily()->onOn
       <h3>Tags are opt in</h3>
       <p>Headroom can tag requests with your own context, such as a tenant or user. The ledger stores a tag only if its key is on the <code>tags.allowed</code> list, which is empty by default. A user ID is personal data, so record it only if you need it.</p>
 <pre><span class="s">'tags'</span> => [<span class="s">'allowed'</span> => [<span class="s">'tenant_id'</span>], <span class="s">'primary_tag'</span> => <span class="s">'tenant_id'</span>],</pre>
+      <p>In a multi-tenant app, look requests and runs up through a filtered query, <code>Ledger::query()->forTag('tenant_id', $id)->find($requestId)</code>, rather than <code>Ledger::find()</code>, which returns any tenant's request by ID.</p>
       <h3>Retention and erasure</h3>
       <p>Raw entries and rollups have their own retention (90 days and two years by default). For a data subject request, <code>Ledger::forgetTag('user_id', 123)</code> removes the tag everywhere, gives that person's agent runs new random IDs so they no longer match your logs, and keeps the totals correct. Read the <a href="https://github.com/phoenix1331/laravel-ai-headroom-ledger/blob/main/SECURITY.md">security policy</a> for the full picture.</p>
     </div></div>
