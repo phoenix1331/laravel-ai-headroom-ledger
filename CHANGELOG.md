@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-18
+
 ### Added
 
 - `LedgerQuery::orderBy(EntrySort $sort, bool $descending = true)` and the `EntrySort` enum (`CountedAt`, `PercentUsed`, `Cost`, `InputTokens`, `OutputTokens`) to sort `entries()`. Requests without the figure sort last in either direction on every database, and ties fall back to the request ID. `Cost` and `InputTokens` use the actual figure, else the estimate; amounts in different currencies sort by their stored value, without conversion. The default order is still newest first
@@ -42,5 +44,6 @@ First release.
 - Publishable, database-agnostic migrations (`headroom-ledger-migrations`), tested on SQLite, PostgreSQL, MySQL and MariaDB, with an optional separate `connection` and `table_prefix`
 - `LedgerEntryFactory` with states for every outcome (`counted`, `completed`, `warned`, `blocked`, `failed`, `streamed`, `abandoned`, `approximateCost`, `failover`, `inRun`) for seeding demos and testing apps and dashboards, with no Faker dependency
 
-[Unreleased]: https://github.com/phoenix1331/laravel-ai-headroom-ledger/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/phoenix1331/laravel-ai-headroom-ledger/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/phoenix1331/laravel-ai-headroom-ledger/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/phoenix1331/laravel-ai-headroom-ledger/releases/tag/v0.1.0
