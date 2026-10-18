@@ -65,7 +65,13 @@ arch('events are final and readonly')
     ->toBeReadonly();
 
 it('lists the public API classes it checks', function (): void {
-    expect(publicApiClasses())->toContain(LedgerQuery::class, 'Phoenix1331\\AiHeadroomLedger\\Data\\LedgerEntry', 'Phoenix1331\\AiHeadroomLedger\\Events\\LedgerEntryRecorded');
+    expect(publicApiClasses())->toContain(
+        LedgerQuery::class,
+        'Phoenix1331\\AiHeadroomLedger\\Data\\LedgerEntry',
+        'Phoenix1331\\AiHeadroomLedger\\Data\\LedgerPage',
+        'Phoenix1331\\AiHeadroomLedger\\Enums\\EntrySort',
+        'Phoenix1331\\AiHeadroomLedger\\Events\\LedgerEntryRecorded',
+    );
 });
 
 it('never returns an Eloquent type from a public method', function (string $class): void {
