@@ -3,6 +3,7 @@
 /.github            export-ignore
 /.husky             export-ignore
 /docs               export-ignore
+/examples           export-ignore
 /tests              export-ignore
 /workbench          export-ignore
 /.editorconfig      export-ignore

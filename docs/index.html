@@ -133,7 +133,8 @@
 
   section { padding: 3.5rem 0; border-top: 1px solid var(--rule); }
 
-  code, pre { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  /* Ligatures would draw PHP's -> and => as arrows, which misleads in code. */
+  code, pre { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-ligatures: none; }
   :not(pre) > code { font-size: 0.9em; background: color-mix(in srgb, var(--ink) 8%, transparent); padding: 0.1em 0.35em; border-radius: 4px; }
   pre {
     background: var(--code-bg); color: var(--code-ink); padding: 1.125rem 1.25rem; border-radius: 8px;
@@ -355,6 +356,34 @@ Ledger::find($requestId);                                <span class="c">// one 
 Ledger::run($invocationId);                              <span class="c">// every step of an agent run, with totals</span></pre>
       <div class="measure">
         <p>Honest by design. A request that never reported usage has an estimate but no actual figures; it is never counted as zero. <code>spend()</code> keeps the reported and estimate-only parts separate, every amount carries its currency and whether it is an estimate, and different currencies are never added together. Money is held as integer millionths, so a request that cost a fraction of a cent still shows up.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="dashboard">
+    <div class="wrap">
+      <div class="measure">
+        <h2>Your data, your UI</h2>
+        <p>The query API is all a dashboard needs. This is a plain Livewire page in an app that answers questions about the Laravel docs, built only on the calls above: no ledger tables, no models. It shows 7 days of real Gemini requests alongside demo traffic from the package's factory.</p>
+      </div>
+      <a href="ledger-dashboard-dark.png"><img class="demo" src="ledger-dashboard-dark.png" width="1280" height="2081" loading="lazy" alt="A Livewire dashboard over 7 days, with numbered panels: 1 spend, tokens, context and estimate error tiles; 2 requests per day by outcome; 3 reported spend per day; 4 a breakdown by model; 5 estimate accuracy per model and count method; 6 stopped or warned requests with the limit hit; 7 recent requests with tags"></a>
+      <p class="caption">Select the image for full size. Real requests from the docs app's web page and command line, plus demo history tagged <code>channel=demo</code>.</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Panel</th><th>Query API</th></tr></thead>
+          <tbody>
+            <tr><td>1 Headline tiles</td><td><code>spend()</code> (reported and estimate-only kept apart), <code>tokens()</code>, <code>context()</code>, <code>accuracy()->overall()</code></td></tr>
+            <tr><td>2 Requests per day by outcome</td><td><code>byDay()->context()</code> and <code>byDay()->tokens()</code>, every day of the range</td></tr>
+            <tr><td>3 Reported spend per day</td><td><code>byDay()->spend()</code></td></tr>
+            <tr><td>4 Breakdown</td><td><code>byModel()</code>, <code>byProvider()</code>, <code>byAgent()</code> or <code>byTag($key)</code>, then <code>spend()</code>, <code>tokens()</code>, <code>context()</code></td></tr>
+            <tr><td>5 Estimate accuracy</td><td><code>accuracy()</code>, per model and count method</td></tr>
+            <tr><td>6 Stopped or warned</td><td><code>blocked()->entries(8)</code></td></tr>
+            <tr><td>7 Recent requests</td><td><code>entries(25)</code>; a row opens <code>Ledger::run($invocationId)</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="measure">
+        <p>The whole page (component, view and stylesheet, for Livewire 3 or 4 and Tailwind v4) is in <a href="https://github.com/phoenix1331/laravel-ai-headroom-ledger/tree/main/examples/livewire-dashboard"><code>examples/livewire-dashboard</code></a>, ready to copy into your app. It is not part of the package. Prefer Filament? <a href="https://github.com/phoenix1331/filament-headroom">Filament Headroom</a> will package a dashboard for Filament panels.</p>
       </div>
     </div>
   </section>

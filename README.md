@@ -249,6 +249,27 @@ LedgerEntryFactory::new()->count(3)->inRun()->withTags(['tenant_id' => 42])->cre
 
 States: `counted`, `completed`, `warned`, `blocked`, `failed`, `streamed`, `abandoned`, `approximateCost`, `failover`, `inRun`, `forAgent`, `forModel`, `countMethod`, `inCurrency`, `at`, `withTags`.
 
+## Your own dashboard
+
+The query API is all a dashboard needs. This one is a plain Livewire page in an app that answers questions about the Laravel docs, showing 7 days of real and demo traffic:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/ledger-dashboard-dark.png">
+  <img src="docs/ledger-dashboard-light.png" alt="A Livewire dashboard over 7 days, with numbered panels: 1 spend, tokens, context and estimate error tiles; 2 requests per day by outcome; 3 reported spend per day; 4 a breakdown by model; 5 estimate accuracy per model and count method; 6 stopped or warned requests with the limit hit; 7 recent requests with tags">
+</picture>
+
+| Panel | Query API |
+|---|---|
+| 1 Headline tiles | `spend()` (reported and estimate-only kept apart), `tokens()`, `context()`, `accuracy()->overall()` |
+| 2 Requests per day by outcome | `byDay()->context()` and `byDay()->tokens()`; every day of the range, empty days included |
+| 3 Reported spend per day | `byDay()->spend()` |
+| 4 Breakdown | `byModel()`, `byProvider()`, `byAgent()` or `byTag($key)`, then `spend()`, `tokens()`, `context()` |
+| 5 Estimate accuracy | `accuracy()`, per model and count method |
+| 6 Stopped or warned | `blocked()->entries(8)` |
+| 7 Recent requests | `entries(25)`; selecting a row opens `Ledger::run($invocationId)` |
+
+The whole page is in [`examples/livewire-dashboard`](examples/livewire-dashboard) (Livewire 3 or 4 and Tailwind v4) to copy into your app. It is not part of the package. [Filament Headroom](https://github.com/phoenix1331/filament-headroom) will package a dashboard for Filament panels.
+
 ## Architecture notes
 
 - **One row per provider call, keyed by Headroom's request ID.** An agent run with tool steps makes several calls, grouped by the SDK's invocation ID; `byRun()` and `Ledger::run()` aggregate per run.
@@ -279,6 +300,7 @@ The ledger stores numbers, model and agent names, and the tags you allowlist; ne
 - [Contributing](CONTRIBUTING.md)
 - [Releasing](RELEASING.md)
 - [Headroom](https://github.com/phoenix1331/laravel-ai-headroom)
+- [Livewire dashboard example](examples/livewire-dashboard)
 - [Filament Headroom](https://github.com/phoenix1331/filament-headroom)
 - [Packagist](https://packagist.org/packages/phoenix1331/laravel-ai-headroom-ledger)
 
