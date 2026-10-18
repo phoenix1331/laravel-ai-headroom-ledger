@@ -251,7 +251,7 @@ States: `counted`, `completed`, `warned`, `blocked`, `failed`, `streamed`, `aban
 
 ## Your own dashboard
 
-The query API is all a dashboard needs. This one is a plain Livewire page in an app that answers questions about the Laravel docs, showing 7 days of real and demo traffic:
+The query API is all a dashboard needs. This one is a plain Livewire page, tested in a copy of [laravel-docs-rag-playground](https://github.com/phoenix1331/laravel-docs-rag-playground) (a Laravel app that answers questions about the Laravel docs) with Headroom and the ledger installed from Packagist. It shows 7 days of real Gemini requests and demo traffic:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/ledger-dashboard-dark.png">

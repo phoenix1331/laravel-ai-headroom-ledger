@@ -364,7 +364,7 @@ Ledger::run($invocationId);                              <span class="c">// ever
     <div class="wrap">
       <div class="measure">
         <h2>Your data, your UI</h2>
-        <p>The query API is all a dashboard needs. This is a plain Livewire page in an app that answers questions about the Laravel docs, built only on the calls above: no ledger tables, no models. It shows 7 days of real Gemini requests alongside demo traffic from the package's factory.</p>
+        <p>The query API is all a dashboard needs. This is a plain Livewire page, built only on the calls above (no ledger tables, no models) and tested in a copy of <a href="https://github.com/phoenix1331/laravel-docs-rag-playground">laravel-docs-rag-playground</a>, a Laravel app that answers questions about the Laravel docs. It shows 7 days of real Gemini requests alongside demo traffic from the package's factory.</p>
       </div>
       <a href="ledger-dashboard-dark.png"><img class="demo" src="ledger-dashboard-dark.png" width="1280" height="2081" loading="lazy" alt="A Livewire dashboard over 7 days, with numbered panels: 1 spend, tokens, context and estimate error tiles; 2 requests per day by outcome; 3 reported spend per day; 4 a breakdown by model; 5 estimate accuracy per model and count method; 6 stopped or warned requests with the limit hit; 7 recent requests with tags"></a>
       <p class="caption">Select the image for full size. Real requests from the docs app's web page and command line, plus demo history tagged <code>channel=demo</code>.</p>

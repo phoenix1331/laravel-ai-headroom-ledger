@@ -2,6 +2,8 @@
 
 A complete AI usage dashboard built only on Headroom Ledger's public query API: one Livewire component, one view, one badge component and a stylesheet. It is an example to copy and change, not part of the package (it is left out of the Composer archive).
 
+It was built and tested in a copy of [laravel-docs-rag-playground](https://github.com/phoenix1331/laravel-docs-rag-playground), a Laravel 13 app that answers questions about the Laravel docs, with both packages installed from Packagist and its docs agent guarded by `EnsureHeadroom`.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../../docs/ledger-dashboard-dark.png">
   <img src="../../docs/ledger-dashboard-light.png" alt="The example dashboard over 7 days: spend, tokens, context and estimate error tiles; requests per day by outcome; reported spend per day; a breakdown by model; estimate accuracy; stopped or warned requests; recent requests">
