@@ -2,6 +2,8 @@
 
 **A ledger of every AI request your app makes: estimated, used, spent.**
 
+> **The Headroom family:** [Headroom](https://github.com/phoenix1331/laravel-ai-headroom) counts and guards requests · **Headroom Ledger** records them (this package) · [Headroom for Filament](https://github.com/phoenix1331/filament-headroom) shows them in a Filament panel
+
 Headroom Ledger records [Headroom](https://github.com/phoenix1331/laravel-ai-headroom)'s events in your database, one row per provider call: what was estimated before it was sent, what was actually used, what it cost, how close it came to the context limit, and whether it was warned or blocked. Then it answers questions about them through a typed query API and an artisan report.
 
 [![Tests](https://github.com/phoenix1331/laravel-ai-headroom-ledger/actions/workflows/tests.yml/badge.svg)](https://github.com/phoenix1331/laravel-ai-headroom-ledger/actions/workflows/tests.yml)
@@ -34,7 +36,7 @@ AI cost dashboards already exist for Laravel. They know what a request cost afte
 3. **What was stopped, and what nearly was?** Every warned and blocked request, with the limit it hit
 4. **What did the requests that never finished cost?** Blocked requests and abandoned streams keep their estimate, flagged as an estimate, rather than vanishing or counting as zero
 
-It is the second of three packages: [Headroom](https://github.com/phoenix1331/laravel-ai-headroom) counts and guards and fires events but stores nothing, so it stays lean with no migrations; this package stores them and provides the query API; [Filament Headroom](https://github.com/phoenix1331/filament-headroom) will be the dashboard built on that API.
+It is the second of three packages: [Headroom](https://github.com/phoenix1331/laravel-ai-headroom) counts and guards and fires events but stores nothing, so it stays lean with no migrations; this package stores them and provides the query API; [Headroom for Filament](https://github.com/phoenix1331/filament-headroom) is the dashboard built on that API.
 
 The interesting engineering is in staying correct without coordination:
 
@@ -287,7 +289,7 @@ The query API is all a dashboard needs. This one is a plain Livewire page, teste
 | 6 Stopped or warned | `blocked()->orderBy(EntrySort::PercentUsed)->entries(8)`, closest to the limit first |
 | 7 Recent requests | `orderBy(...)->paginate(10, $page)` with sortable columns; selecting a row opens `$query->run($invocationId)`, scoped to the filter |
 
-The whole page is in [`examples/livewire-dashboard`](examples/livewire-dashboard) (Livewire 3 or 4 and Tailwind v4) to copy into your app. It is not part of the package. [Filament Headroom](https://github.com/phoenix1331/filament-headroom) will package a dashboard for Filament panels.
+The whole page is in [`examples/livewire-dashboard`](examples/livewire-dashboard) (Livewire 3 or 4 and Tailwind v4) to copy into your app. It is not part of the package. On Filament, [Headroom for Filament](https://github.com/phoenix1331/filament-headroom) packages a fuller dashboard as a panel plugin.
 
 ## Architecture notes
 
@@ -306,7 +308,7 @@ The whole page is in [`examples/livewire-dashboard`](examples/livewire-dashboard
 - **A stream the client abandons never reports usage,** so it stays `counted`, and it is not marked as streamed because only `TokensUsed` says so.
 - **Pruned days cannot be rebuilt.** Once a day's entries are past retention, the rollup command keeps its existing rollup rather than rebuilding it from nothing.
 - **Currencies are never converted.** Amounts are grouped per currency; `Spend::sole()` throws if there is more than one.
-- **0.x.** The schema and query API become stable at 1.0, once the Filament plugin has been built on them. Until then a minor version may change them, with notes in the changelog.
+- **0.x.** The schema and query API become stable at 1.0. [Headroom for Filament](https://github.com/phoenix1331/filament-headroom) is now built on them, and the gaps it exposed were added in 0.1.1; until 1.0 a minor version may still change them, with notes in the changelog.
 
 ## Security
 
@@ -320,7 +322,7 @@ The ledger stores numbers, model and agent names, and the tags you allowlist; ne
 - [Releasing](RELEASING.md)
 - [Headroom](https://github.com/phoenix1331/laravel-ai-headroom)
 - [Livewire dashboard example](examples/livewire-dashboard)
-- [Filament Headroom](https://github.com/phoenix1331/filament-headroom)
+- [Headroom for Filament](https://github.com/phoenix1331/filament-headroom)
 - [Packagist](https://packagist.org/packages/phoenix1331/laravel-ai-headroom-ledger)
 
 ## Licence

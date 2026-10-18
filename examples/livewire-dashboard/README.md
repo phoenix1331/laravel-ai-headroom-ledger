@@ -81,4 +81,4 @@ Every result is a readonly value object (`SpendSummary`, `TokenTotals`, `Context
 - **Outcome colours are status colours**, always paired with a label; the estimate breakdown uses a fixed colour per section, so a colour always means the same section.
 - **Every chart has a table view** (the "Daily figures as a table" panel), and columns are focusable with a tooltip on hover or focus.
 
-[Filament Headroom](https://github.com/phoenix1331/filament-headroom) will package a dashboard like this for Filament panels. This example is for apps that want their own.
+On Filament, [Headroom for Filament](https://github.com/phoenix1331/filament-headroom) packages a dashboard like this as a panel plugin. This example is for apps that want their own.
