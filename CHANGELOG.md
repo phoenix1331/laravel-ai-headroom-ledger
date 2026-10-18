@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `LedgerQuery::orderBy(EntrySort $sort, bool $descending = true)` and the `EntrySort` enum (`CountedAt`, `PercentUsed`, `Cost`, `InputTokens`, `OutputTokens`) to sort `entries()`. Requests without the figure sort last in either direction on every database, and ties fall back to the request ID. `Cost` and `InputTokens` use the actual figure, else the estimate; amounts in different currencies sort by their stored value, without conversion. The default order is still newest first
+- `LedgerQuery::paginate(int $perPage = 25, int $page = 1)` returning a readonly `LedgerPage` (`entries`, `total`, `page`, `perPage`, `lastPage()`, `hasMorePages()`, `isEmpty()`), following the query's filters and `orderBy()`; a page past the end is empty with the right total
+- `LedgerQuery::forCountMethod(CountMethod ...$methods)` to filter by how Headroom counted a request; answered from daily rollups like the other filters
+- `LedgerQuery::find($requestId)` and `LedgerQuery::run($invocationId)`, which return null unless the request or the run's steps match every filter, so a multi-tenant app can look up by ID without reaching another tenant's data. A date filter keeps only the steps of a run inside the range
+- `GroupedQuery::accuracy()` returning a `Breakdown` of `AccuracyStats`, for estimate accuracy over time or per model, provider, agent, tag or run; read from daily rollups where the grouping allows. With `byDay()` and a range, days without samples are included and empty
+- `AccuracyStats` implements `Arrayable`
+
+### Changed
+
+- `Ledger::find()` and `Ledger::run()` docblocks and the README now warn that they are unscoped and point multi-tenant apps at the filtered `LedgerQuery` versions. Their behaviour is unchanged
+
 ## [0.1.0] - 2026-10-17
 
 First release.
