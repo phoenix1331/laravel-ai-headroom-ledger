@@ -311,7 +311,7 @@
         {{-- Stopped and warned --}}
         <div class="panel">
             <h2 class="panel-title">Stopped or warned</h2>
-            <p class="mt-1 text-xs text-muted">The latest requests that hit a Headroom limit, with the limit they hit.</p>
+            <p class="mt-1 text-xs text-muted">Requests that hit a Headroom limit, closest to the context window first, with the limit they hit.</p>
             <ul class="mt-4 divide-y divide-rule">
                 @forelse ($this->stopped as $entry)
                     <li class="flex items-center justify-between gap-4 py-2.5 text-sm" wire:key="stopped-{{ $entry->requestId }}">
@@ -335,25 +335,27 @@
     {{-- Recent requests --}}
     <section class="panel">
         <h2 class="panel-title">Recent requests</h2>
-        <p class="mt-1 text-xs text-muted">One row per provider call, newest first. Select a row to see its whole agent run.</p>
+        <p class="mt-1 text-xs text-muted">One row per provider call, newest first. Select a column heading to sort, or a row to see its whole agent run.</p>
+        @php($sortable = fn (string $sort, string $label) => ['sort' => $sort, 'label' => $label, 'active' => $this->sort === $sort])
         <div class="mt-4 overflow-x-auto">
             <table class="data">
                 <thead>
                     <tr>
-                        <th>When</th>
-                        <th>Outcome</th>
-                        <th>Agent</th>
-                        <th>Model</th>
-                        <th class="num">Est. input</th>
-                        <th class="num">Input</th>
-                        <th class="num">Output</th>
-                        <th class="num">Context</th>
-                        <th class="num">Cost</th>
-                        <th>Tags</th>
+                        @foreach ([$sortable('counted_at', 'When'), 'Outcome', 'Agent', 'Model', 'Est. input', $sortable('input_tokens', 'Input'), $sortable('output_tokens', 'Output'), $sortable('percent_used', 'Context'), $sortable('cost', 'Cost'), 'Tags'] as $column)
+                            @if (is_string($column))
+                                <th @class(['num' => $column === 'Est. input'])>{{ $column }}</th>
+                            @else
+                                <th @class(['num' => $column['sort'] !== 'counted_at']) aria-sort="{{ $column['active'] ? ($desc ? 'descending' : 'ascending') : 'none' }}">
+                                    <button type="button" wire:click="sortBy('{{ $column['sort'] }}')" @class(['sort', 'sort-on' => $column['active']])>
+                                        {{ $column['label'] }}<span aria-hidden="true">{{ $column['active'] ? ($desc ? '↓' : '↑') : '' }}</span>
+                                    </button>
+                                </th>
+                            @endif
+                        @endforeach
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse ($this->recent as $entry)
+                    @forelse ($this->recent->entries as $entry)
                         <tr wire:key="entry-{{ $entry->requestId }}"
                             @if ($entry->invocationId) wire:click="openRun('{{ $entry->invocationId }}')" class="row-link" tabindex="0" @keydown.enter="$wire.openRun('{{ $entry->invocationId }}')" @endif>
                             <td class="whitespace-nowrap" title="{{ $entry->countedAt ?? $entry->usedAt }}">{{ ($entry->countedAt ?? $entry->usedAt)?->format('j M H:i') }}</td>
@@ -372,11 +374,19 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="10" class="py-6 text-center text-muted">No requests in this range.</td></tr>
+                        <tr><td colspan="10" class="py-6 text-center text-muted">{{ $this->recent->total === 0 ? 'No requests in this range.' : 'No requests on this page.' }}</td></tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
+        @php($recent = $this->recent)
+        <nav class="mt-3 flex items-center justify-between gap-4 text-xs text-muted" aria-label="Recent requests pages">
+            <p>{{ number_format($recent->total) }} {{ $recent->total === 1 ? 'request' : 'requests' }} &middot; page {{ $recent->page }} of {{ $recent->lastPage() }}</p>
+            <div class="flex gap-2">
+                <button type="button" wire:click="goToPage({{ $recent->page - 1 }})" class="pager" @disabled($recent->page <= 1)>Previous</button>
+                <button type="button" wire:click="goToPage({{ min($recent->page + 1, $recent->lastPage()) }})" class="pager" @disabled(! $recent->hasMorePages())>Next</button>
+            </div>
+        </nav>
     </section>
 
     {{-- Agent run detail --}}

@@ -15,7 +15,7 @@ The numbered panels are listed in [Where each panel comes from](#where-each-pane
 
 | | |
 |---|---|
-| Headroom Ledger | installed, migrated and recording ([README](../../README.md#install)) |
+| Headroom Ledger | 0.1.1 or later, installed, migrated and recording ([README](../../README.md#install)) |
 | Livewire | 3 or 4 |
 | Tailwind CSS | v4 (the view uses utility classes; the stylesheet adds the rest) |
 | A layout | `resources/views/layouts/app.blade.php` with a `$slot`, or change `#[Layout]` |
@@ -68,11 +68,11 @@ LedgerEntryFactory::new()->count(200)->withTags(['channel' => 'web'])->create();
 | 2, 3 Requests and spend per day | `byDay()->context()`, `byDay()->tokens()`, `byDay()->spend()`; every day of the range is returned, empty days included |
 | 4 Breakdown | `byModel()`, `byProvider()`, `byAgent()` or `byTag($key)`, then `spend()`, `tokens()`, `context()` |
 | 5 Estimate accuracy | `accuracy()`, per model and count method |
-| 6 Stopped or warned | `blocked()->entries(8)` |
-| 7 Recent requests | `entries(25)` |
-| Agent run panel (select a row in 7) | `Ledger::run($invocationId)` |
+| 6 Stopped or warned | `blocked()->orderBy(EntrySort::PercentUsed)->entries(8)`, closest to the limit first |
+| 7 Recent requests | `orderBy(EntrySort::from($sort), $desc)->paginate(PER_PAGE, $page)`; the `LedgerPage` carries the total and last page for the page links |
+| Agent run panel (select a row in 7) | `$this->query()->run($invocationId)`, so the channel filter (and date range) applies to the run's steps too |
 
-Every result is a readonly value object (`SpendSummary`, `TokenTotals`, `ContextUsage`, `Breakdown`, `LedgerEntry`...), so the same calls work behind Blade, Inertia or a JSON API. Aggregates read daily rollups for closed days and raw entries for today, so the page stays fast as the ledger grows.
+Every result is a readonly value object (`SpendSummary`, `TokenTotals`, `ContextUsage`, `Breakdown`, `LedgerEntry`, `LedgerPage`...), so the same calls work behind Blade, Inertia or a JSON API. Aggregates read daily rollups for closed days and raw entries for today, so the page stays fast as the ledger grows.
 
 ## Design notes
 

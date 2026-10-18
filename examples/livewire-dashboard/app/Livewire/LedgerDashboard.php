@@ -15,9 +15,11 @@ use Phoenix1331\AiHeadroomLedger\Data\AccuracyStats;
 use Phoenix1331\AiHeadroomLedger\Data\ContextUsage;
 use Phoenix1331\AiHeadroomLedger\Data\LedgerEntries;
 use Phoenix1331\AiHeadroomLedger\Data\LedgerEntry;
+use Phoenix1331\AiHeadroomLedger\Data\LedgerPage;
 use Phoenix1331\AiHeadroomLedger\Data\RunSummary;
 use Phoenix1331\AiHeadroomLedger\Data\SpendSummary;
 use Phoenix1331\AiHeadroomLedger\Data\TokenTotals;
+use Phoenix1331\AiHeadroomLedger\Enums\EntrySort;
 use Phoenix1331\AiHeadroomLedger\Facades\Ledger;
 use Phoenix1331\AiHeadroomLedger\Query\GroupedQuery;
 use Phoenix1331\AiHeadroomLedger\Query\LedgerQuery;
@@ -47,6 +49,11 @@ class LedgerDashboard extends Component
      */
     public const string FILTER_TAG = 'channel';
 
+    /**
+     * Rows per page of recent requests.
+     */
+    public const int PER_PAGE = 10;
+
     #[Url]
     public int $days = 7;
 
@@ -60,6 +67,18 @@ class LedgerDashboard extends Component
     public string $by = 'model';
 
     /**
+     * Recent requests: page number, sort column (an EntrySort value) and direction.
+     */
+    #[Url]
+    public int $page = 1;
+
+    #[Url]
+    public string $sort = 'counted_at';
+
+    #[Url]
+    public bool $desc = true;
+
+    /**
      * The agent run (invocation ID) open in the detail panel.
      */
     #[Url]
@@ -70,6 +89,8 @@ class LedgerDashboard extends Component
         $this->days = array_key_exists($this->days, self::RANGES) ? $this->days : 7;
         $this->by = array_key_exists($this->by, self::GROUPINGS) ? $this->by : 'model';
         $this->channel = in_array($this->channel, $this->channels(), true) ? $this->channel : '';
+        $this->sort = EntrySort::tryFrom($this->sort) === null ? 'counted_at' : $this->sort;
+        $this->page = max(1, $this->page);
     }
 
     public function updated(string $property): void
@@ -85,6 +106,30 @@ class LedgerDashboard extends Component
         if ($property === 'channel' && ! in_array($this->channel, $this->channels(), true)) {
             $this->channel = '';
         }
+
+        // A new range or filter changes what is on each page, so start again from the first.
+        if (in_array($property, ['days', 'channel'], true)) {
+            $this->page = 1;
+        }
+    }
+
+    /**
+     * Sort recent requests by a column; selecting the current column flips the direction.
+     */
+    public function sortBy(string $sort): void
+    {
+        if (EntrySort::tryFrom($sort) === null) {
+            return;
+        }
+
+        $this->desc = $this->sort === $sort ? ! $this->desc : true;
+        $this->sort = $sort;
+        $this->page = 1;
+    }
+
+    public function goToPage(int $page): void
+    {
+        $this->page = max(1, $page);
     }
 
     public function openRun(string $invocationId): void
@@ -240,22 +285,30 @@ class LedgerDashboard extends Component
         return $rows;
     }
 
+    /**
+     * Requests that hit a limit, closest to the context window first.
+     */
     #[Computed]
     public function stopped(): LedgerEntries
     {
-        return $this->query()->blocked()->entries(8);
+        return $this->query()->blocked()->orderBy(EntrySort::PercentUsed)->entries(8);
     }
 
     #[Computed]
-    public function recent(): LedgerEntries
+    public function recent(): LedgerPage
     {
-        return $this->query()->entries(25);
+        return $this->query()
+            ->orderBy(EntrySort::tryFrom($this->sort) ?? EntrySort::CountedAt, $this->desc)
+            ->paginate(self::PER_PAGE, $this->page);
     }
 
+    /**
+     * The run through the page's filters, so a channel filter applies to its steps too.
+     */
     #[Computed]
     public function selectedRun(): ?RunSummary
     {
-        return $this->run === null ? null : Ledger::run($this->run);
+        return $this->run === null ? null : $this->query()->run($this->run);
     }
 
     /**
