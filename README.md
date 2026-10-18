@@ -274,7 +274,7 @@ The query API is all a dashboard needs. This one is a plain Livewire page, teste
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/ledger-dashboard-dark.png">
-  <img src="docs/ledger-dashboard-light.png" alt="A Livewire dashboard over 7 days, with numbered panels: 1 spend, tokens, context and estimate error tiles; 2 requests per day by outcome; 3 reported spend per day; 4 a breakdown by model; 5 estimate accuracy per model and count method; 6 stopped or warned requests with the limit hit; 7 recent requests with tags">
+  <img src="docs/ledger-dashboard-light.png" alt="A Livewire dashboard over 7 days, with numbered panels: 1 spend, tokens, context and estimate error tiles; 2 requests per day by outcome; 3 reported spend per day; 4 a breakdown by model; 5 estimate accuracy per model and count method; 6 stopped or warned requests with the limit hit; 7 recent requests with tags, sortable columns and page links">
 </picture>
 
 | Panel | Query API |
